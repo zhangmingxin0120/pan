@@ -267,11 +267,12 @@ async def test_single_admin_requires_password_change(client: AsyncClient, sessio
 
     reset = await client.post(
         f"/api/v1/admin/users/{created_body['user']['id']}/reset-password",
+        json={"password": "123456"},
         headers=new_headers,
     )
     assert reset.status_code == 200
     reset_password = reset.json()["temporary_password"]
-    assert reset_password != temporary_password
+    assert reset_password == "123456"
     assert (await client.get("/api/v1/auth/me", headers=assigned_headers)).status_code == 401
     assert (
         await client.post(

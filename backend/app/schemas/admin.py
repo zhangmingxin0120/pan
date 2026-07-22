@@ -46,6 +46,10 @@ class AdminPasswordResetResponse(BaseModel):
     temporary_password: str
 
 
+class AdminPasswordResetRequest(BaseModel):
+    password: str = Field(default="123456", min_length=6, max_length=128)
+
+
 class AdminSettingsResponse(BaseModel):
     registration_enabled: bool
 

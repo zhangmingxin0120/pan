@@ -28,7 +28,7 @@ export const updateSettings = (registrationEnabled: boolean) =>
 export const createUser = (payload: { email: string; name: string; quota_bytes?: number }) =>
   request.post<AdminUserCreateResult>('/admin/users', payload).then((response) => response.data)
 
-export const resetUserPassword = (id: string) =>
+export const resetUserPassword = (id: string, password: string) =>
   request
-    .post<TemporaryPasswordResult>(`/admin/users/${id}/reset-password`)
+    .post<TemporaryPasswordResult>(`/admin/users/${id}/reset-password`, { password })
     .then((response) => response.data)

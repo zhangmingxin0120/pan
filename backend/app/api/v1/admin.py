@@ -13,6 +13,7 @@ from app.core.security import create_access_token, hash_password, verify_passwor
 from app.models import Node, NodeKind, User
 from app.schemas.auth import AdminLoginRequest, TokenResponse
 from app.schemas.admin import (
+    AdminPasswordResetRequest,
     AdminPasswordResetResponse,
     AdminOverviewResponse,
     AdminSettingsResponse,
@@ -169,18 +170,18 @@ async def create_user(
 @router.post("/users/{user_id}/reset-password", response_model=AdminPasswordResetResponse)
 async def reset_user_password(
     user_id: uuid.UUID,
+    payload: AdminPasswordResetRequest,
     _: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db),
 ):
     user = await db.scalar(select(User).where(User.id == user_id, User.is_admin.is_(False)))
     if not user:
         raise AppError(404, "USER_NOT_FOUND", "用户不存在")
-    password = temporary_password()
-    user.password_hash = hash_password(password)
+    user.password_hash = hash_password(payload.password)
     user.must_change_password = True
     user.token_version += 1
     await db.commit()
-    return AdminPasswordResetResponse(temporary_password=password)
+    return AdminPasswordResetResponse(temporary_password=payload.password)
 
 
 @router.patch("/users/{user_id}", response_model=AdminUserResponse)

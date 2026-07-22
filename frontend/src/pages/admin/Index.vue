@@ -10,7 +10,6 @@ import {
   NModal,
   NSwitch,
   NTag,
-  useDialog,
   useMessage,
   type DataTableColumns,
 } from 'naive-ui'
@@ -30,7 +29,6 @@ import type { AdminOverview, AdminSettings, AdminUser } from '@/types'
 const router = useRouter()
 const authStore = useAuthStore()
 const message = useMessage()
-const dialog = useDialog()
 const overview = ref<AdminOverview | null>(null)
 const settings = ref<AdminSettings | null>(null)
 const users = ref<AdminUser[]>([])
@@ -40,6 +38,7 @@ const settingsLoading = ref(false)
 
 const quotaDialog = reactive({ show: false, user: null as AdminUser | null, gb: null as number | null, loading: false })
 const createDialog = reactive({ show: false, email: '', name: '', quotaGb: 5, loading: false })
+const resetDialog = reactive({ show: false, user: null as AdminUser | null, password: '123456', loading: false })
 const credentialDialog = reactive({ show: false, title: '', email: '', password: '' })
 
 const formatSize = (bytes: number) => {
@@ -156,23 +155,28 @@ async function submitCreateUser() {
 }
 
 function resetPassword(user: AdminUser) {
-  dialog.warning({
-    title: `重置 ${user.name} 的密码？`,
-    content: '重置后该用户的所有现有登录立即失效，并需要使用新临时密码登录。',
-    positiveText: '确认重置',
-    negativeText: '取消',
-    async onPositiveClick() {
-      try {
-        const result = await resetUserPassword(user.id)
-        credentialDialog.title = '密码已重置'
-        credentialDialog.email = user.email
-        credentialDialog.password = result.temporary_password
-        credentialDialog.show = true
-      } catch (error) {
-        message.error(errorText(error))
-      }
-    },
-  })
+  resetDialog.user = user
+  resetDialog.password = '123456'
+  resetDialog.show = true
+}
+
+async function submitResetPassword() {
+  if (!resetDialog.user) return false
+  if (resetDialog.password.length < 6) return message.warning('重置密码至少需要 6 位'), false
+  resetDialog.loading = true
+  try {
+    const result = await resetUserPassword(resetDialog.user.id, resetDialog.password)
+    resetDialog.show = false
+    credentialDialog.title = '密码已重置'
+    credentialDialog.email = resetDialog.user.email
+    credentialDialog.password = result.temporary_password
+    credentialDialog.show = true
+  } catch (error) {
+    message.error(errorText(error))
+  } finally {
+    resetDialog.loading = false
+  }
+  return false
 }
 
 async function copyCredentials() {
@@ -289,6 +293,13 @@ onMounted(() => void load())
       </div>
     </NModal>
 
+    <NModal v-model:show="resetDialog.show" preset="dialog" :title="`重置 ${resetDialog.user?.name || ''} 的密码`" positive-text="确认重置" negative-text="取消" :loading="resetDialog.loading" :mask-closable="false" @positive-click="submitResetPassword">
+      <div class="form-stack">
+        <p class="reset-warning">重置后，该用户的现有登录立即失效，并且下次登录后必须修改密码。</p>
+        <label><span>设置新密码</span><NInput v-model:value="resetDialog.password" maxlength="128" placeholder="请输入至少 6 位密码" /></label>
+      </div>
+    </NModal>
+
     <NModal v-model:show="credentialDialog.show" preset="dialog" :title="credentialDialog.title" positive-text="复制登录信息" negative-text="关闭" :mask-closable="false" @positive-click="copyCredentials">
       <div class="credential-box">
         <p>临时密码只显示这一次，请复制后安全地交给用户。</p>
@@ -311,6 +322,7 @@ onMounted(() => void load())
 .registration-setting { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 17px 20px; margin-bottom: 16px; border: 1px solid $border; border-radius: $radius-lg; background: $surface; }.registration-setting > div { display: grid; gap: 3px; }.registration-setting span { color: $text-muted; font-size: 12px; }
 .users-panel { overflow: hidden; border: 1px solid $border; border-radius: $radius-lg; background: $surface; }.panel-head { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 18px 20px; border-bottom: 1px solid $border; }.panel-head h2 { margin: 0; font-size: 17px; }.panel-head span { color: $text-muted; font-size: 12px; }.panel-actions, :deep(.table-actions) { display: flex; align-items: center; gap: 8px; }.panel-actions :deep(.n-input) { width: 260px; }
 :deep(.user-cell) { display: grid; }:deep(.user-cell small) { color: $text-muted; }.form-stack, .credential-box { display: grid; gap: 14px; padding-top: 6px; }.form-stack label, .credential-box label { display: grid; gap: 6px; color: $text-secondary; font-size: 13px; }.credential-box p { margin: 0; padding: 10px 12px; color: $warning; background: #fff7ea; border-radius: $radius-md; }.credential-box small { color: $text-muted; }
+.reset-warning { margin: 0; padding: 10px 12px; color: $warning; background: #fff7ea; border-radius: $radius-md; font-size: 13px; }
 @media (max-width: 800px) { .admin-header { padding: 0 16px; }.account-actions > span { display: none; }.stats { grid-template-columns: repeat(2, 1fr); }.panel-head { align-items: stretch; flex-direction: column; }.panel-actions :deep(.n-input) { width: 100%; }.panel-actions { align-items: stretch; } }
 @media (max-width: 480px) { .account-actions .n-button:first-of-type { display: none; }.stats { grid-template-columns: 1fr; }.registration-setting { align-items: flex-start; }.panel-actions { flex-direction: column; } }
 </style>
