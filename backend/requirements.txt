@@ -1,0 +1,12 @@
+fastapi==0.115.14
+uvicorn[standard]==0.34.3
+sqlalchemy[asyncio]==2.0.41
+asyncpg==0.30.0
+alembic==1.16.2
+pydantic-settings==2.10.1
+python-multipart==0.0.20
+PyJWT==2.10.1
+pwdlib[argon2]==0.2.1
+email-validator==2.2.0
+aiofiles==24.1.0
+

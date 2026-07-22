@@ -1,0 +1,35 @@
+{
+  "name": "pan-frontend",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vue-tsc -b && vite build",
+    "typecheck": "vue-tsc -b",
+    "lint": "eslint . --max-warnings=0",
+    "format": "prettier --write ."
+  },
+  "dependencies": {
+    "@vicons/tabler": "^0.13.0",
+    "axios": "^1.10.0",
+    "naive-ui": "^2.41.1",
+    "pinia": "^3.0.3",
+    "vue": "^3.5.17",
+    "vue-router": "^4.5.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.29.0",
+    "@types/node": "^24.0.8",
+    "@vitejs/plugin-vue": "^5.2.4",
+    "eslint": "^9.29.0",
+    "eslint-plugin-vue": "^10.2.0",
+    "prettier": "^3.5.3",
+    "sass": "^1.89.2",
+    "typescript": "~5.8.3",
+    "typescript-eslint": "^8.34.1",
+    "vite": "^6.3.5",
+    "vue-tsc": "^2.2.10"
+  }
+}
+
