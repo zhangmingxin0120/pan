@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
 
 
 class AdminOverviewResponse(BaseModel):
@@ -29,3 +29,26 @@ class AdminUserListResponse(BaseModel):
 class AdminUserUpdateRequest(BaseModel):
     is_active: bool | None = None
     quota_bytes: int | None = Field(default=None, ge=0)
+
+
+class AdminUserCreateRequest(BaseModel):
+    email: EmailStr
+    name: str = Field(min_length=1, max_length=80)
+    quota_bytes: int | None = Field(default=None, ge=0)
+
+
+class AdminUserCreateResponse(BaseModel):
+    user: AdminUserResponse
+    temporary_password: str
+
+
+class AdminPasswordResetResponse(BaseModel):
+    temporary_password: str
+
+
+class AdminSettingsResponse(BaseModel):
+    registration_enabled: bool
+
+
+class AdminSettingsUpdateRequest(BaseModel):
+    registration_enabled: bool

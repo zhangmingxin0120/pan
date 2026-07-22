@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.encoders import jsonable_encoder
 
-from app.api.v1 import admin, auth, nodes, shares, storage, trash
+from app.api.v1 import admin, auth, nodes, shares, storage, system, trash
 from app.core.config import settings
 from app.core.errors import AppError, app_error_handler
 from app.services.admin_bootstrap import ensure_single_admin
@@ -45,6 +45,7 @@ async def health():
 
 app.include_router(auth.router, prefix=settings.api_prefix)
 app.include_router(admin.router, prefix=settings.api_prefix)
+app.include_router(system.router, prefix=settings.api_prefix)
 app.include_router(nodes.router, prefix=settings.api_prefix)
 app.include_router(storage.router, prefix=settings.api_prefix)
 app.include_router(trash.router, prefix=settings.api_prefix)

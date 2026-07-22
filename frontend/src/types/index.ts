@@ -33,6 +33,23 @@ export interface AdminUserList {
   total: number
 }
 
+export interface AdminSettings {
+  registration_enabled: boolean
+}
+
+export interface AdminUserCreateResult {
+  user: AdminUser
+  temporary_password: string
+}
+
+export interface TemporaryPasswordResult {
+  temporary_password: string
+}
+
+export interface PublicSystemConfig {
+  registration_enabled: boolean
+}
+
 export interface AuthResponse {
   access_token: string
   token_type: string

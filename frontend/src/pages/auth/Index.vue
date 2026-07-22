@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Eye, EyeOff, Lock, Mail, User } from '@vicons/tabler'
 import { NButton, NForm, NFormItem, NInput, useMessage, type FormInst, type FormRules } from 'naive-ui'
 import AppIcon from '@/components/base/AppIcon.vue'
+import { getPublicSystemConfig } from '@/api/modules/auth'
 import { useAuthStore } from '@/stores/auth.store'
 
 const route = useRoute()
@@ -13,6 +14,7 @@ const authStore = useAuthStore()
 const mode = ref<'login' | 'register'>('login')
 const loading = ref(false)
 const showPassword = ref(false)
+const registrationEnabled = ref(false)
 const formRef = ref<FormInst | null>(null)
 const form = reactive({ email: '', name: '', password: '' })
 
@@ -60,9 +62,18 @@ const submit = async () => {
 }
 
 const switchMode = () => {
+  if (!registrationEnabled.value) return
   mode.value = mode.value === 'login' ? 'register' : 'login'
   form.password = ''
 }
+
+onMounted(async () => {
+  try {
+    registrationEnabled.value = (await getPublicSystemConfig()).registration_enabled
+  } catch {
+    registrationEnabled.value = false
+  }
+})
 </script>
 
 <template>
@@ -110,7 +121,7 @@ const switchMode = () => {
           {{ mode === 'login' ? '登录' : '创建账户' }}
         </NButton>
       </NForm>
-      <p class="switch-copy">
+      <p v-if="registrationEnabled" class="switch-copy">
         {{ mode === 'login' ? '还没有账户？' : '已经有账户？' }}
         <button type="button" @click="switchMode">
           {{ mode === 'login' ? '立即注册' : '返回登录' }}

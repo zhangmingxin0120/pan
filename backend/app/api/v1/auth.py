@@ -15,12 +15,16 @@ from app.schemas.auth import (
     TokenResponse,
     UserResponse,
 )
+from app.services.system_settings import get_system_settings
 
 router = APIRouter(prefix="/auth", tags=["认证"])
 
 
 @router.post("/register", response_model=TokenResponse, status_code=201)
 async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db)):
+    system_settings = await get_system_settings(db)
+    if not system_settings.registration_enabled:
+        raise AppError(403, "REGISTRATION_DISABLED", "系统暂未开放新用户注册")
     email = payload.email.lower()
     name = payload.name.strip()
     if not name:

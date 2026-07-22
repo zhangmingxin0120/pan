@@ -1,5 +1,5 @@
 import request from '@/api/request'
-import type { AuthResponse, User } from '@/types'
+import type { AuthResponse, PublicSystemConfig, User } from '@/types'
 
 export const login = (email: string, password: string) =>
   request.post<AuthResponse>('/auth/login', { email, password }).then((response) => response.data)
@@ -21,3 +21,6 @@ export const changePassword = (currentPassword: string, newPassword: string) =>
       new_password: newPassword,
     })
     .then((response) => response.data)
+
+export const getPublicSystemConfig = () =>
+  request.get<PublicSystemConfig>('/system/config').then((response) => response.data)

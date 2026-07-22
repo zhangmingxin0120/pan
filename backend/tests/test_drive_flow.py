@@ -207,6 +207,85 @@ async def test_single_admin_requires_password_change(client: AsyncClient, sessio
     assert denied.status_code == 403
     assert denied.json()["code"] == "ADMIN_REQUIRED"
 
+    public_config = await client.get("/api/v1/system/config")
+    assert public_config.status_code == 200
+    assert public_config.json()["registration_enabled"] is True
+
+    settings_response = await client.patch(
+        "/api/v1/admin/settings",
+        json={"registration_enabled": False},
+        headers=new_headers,
+    )
+    assert settings_response.status_code == 200
+    assert settings_response.json()["registration_enabled"] is False
+    assert (await client.get("/api/v1/system/config")).json()["registration_enabled"] is False
+
+    blocked_registration = await client.post(
+        "/api/v1/auth/register",
+        json={"email": "blocked@example.com", "name": "Blocked", "password": "password123"},
+    )
+    assert blocked_registration.status_code == 403
+    assert blocked_registration.json()["code"] == "REGISTRATION_DISABLED"
+
+    created = await client.post(
+        "/api/v1/admin/users",
+        json={"email": "assigned@example.com", "name": "Assigned"},
+        headers=new_headers,
+    )
+    assert created.status_code == 201
+    created_body = created.json()
+    assert created_body["user"]["quota_bytes"] == 5 * 1024 * 1024 * 1024
+    temporary_password = created_body["temporary_password"]
+    assert len(temporary_password) >= 12
+
+    assigned_login = await client.post(
+        "/api/v1/auth/login",
+        json={"email": "assigned@example.com", "password": temporary_password},
+    )
+    assert assigned_login.status_code == 200
+    assert assigned_login.json()["user"]["must_change_password"] is True
+    temporary_headers = {
+        "Authorization": f"Bearer {assigned_login.json()['access_token']}"
+    }
+    password_required = await client.get("/api/v1/nodes", headers=temporary_headers)
+    assert password_required.status_code == 403
+    assert password_required.json()["code"] == "PASSWORD_CHANGE_REQUIRED"
+
+    assigned_changed = await client.post(
+        "/api/v1/auth/change-password",
+        json={
+            "current_password": temporary_password,
+            "new_password": "assigned-new-password",
+        },
+        headers=temporary_headers,
+    )
+    assert assigned_changed.status_code == 200
+    assigned_headers = {
+        "Authorization": f"Bearer {assigned_changed.json()['access_token']}"
+    }
+    assert (await client.get("/api/v1/nodes", headers=assigned_headers)).status_code == 200
+
+    reset = await client.post(
+        f"/api/v1/admin/users/{created_body['user']['id']}/reset-password",
+        headers=new_headers,
+    )
+    assert reset.status_code == 200
+    reset_password = reset.json()["temporary_password"]
+    assert reset_password != temporary_password
+    assert (await client.get("/api/v1/auth/me", headers=assigned_headers)).status_code == 401
+    assert (
+        await client.post(
+            "/api/v1/auth/login",
+            json={"email": "assigned@example.com", "password": "assigned-new-password"},
+        )
+    ).status_code == 401
+    reset_login = await client.post(
+        "/api/v1/auth/login",
+        json={"email": "assigned@example.com", "password": reset_password},
+    )
+    assert reset_login.status_code == 200
+    assert reset_login.json()["user"]["must_change_password"] is True
+
 
 async def test_legacy_flat_file_migration(
     client: AsyncClient, auth_headers: dict[str, str], session_factory
