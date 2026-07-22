@@ -277,6 +277,7 @@ onMounted(() => void load())
           <span>
             <small>磁盘剩余</small>
             <strong>{{ overview ? formatSize(overview.disk_free_bytes) : '—' }}</strong>
+            <em v-if="overview">项目 data 已用 {{ formatSize(overview.storage_bytes) }}</em>
             <em v-if="overview">共 {{ formatSize(overview.disk_total_bytes) }} · 剩余 {{ diskFreePercent.toFixed(1) }}%</em>
           </span>
           <NTag v-if="overview" :type="diskHealth.type" size="small" round>{{ diskHealth.label }}</NTag>
