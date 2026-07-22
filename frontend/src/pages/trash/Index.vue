@@ -4,7 +4,7 @@ import { Refresh, RotateClockwise2, Trash, TrashX } from '@vicons/tabler'
 import { NButton, NSkeleton, useDialog, useMessage } from 'naive-ui'
 import AppIcon from '@/components/base/AppIcon.vue'
 import FileTypeIcon from '@/components/base/FileTypeIcon.vue'
-import { getTrash, permanentlyDeleteNode, restoreNode } from '@/api/modules/nodes'
+import { emptyTrash, getTrash, permanentlyDeleteNode, restoreNode } from '@/api/modules/nodes'
 import type { DriveNode } from '@/types'
 
 const message = useMessage()
@@ -12,6 +12,7 @@ const dialog = useDialog()
 const items = ref<DriveNode[]>([])
 const loading = ref(true)
 const error = ref('')
+const emptying = ref(false)
 const errorText = (value: unknown) => (value as { userMessage?: string }).userMessage || '操作失败，请重试'
 const formatDate = (value: string) => new Intl.DateTimeFormat('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(value))
 
@@ -36,12 +37,33 @@ function removeForever(node: DriveNode) {
   })
 }
 
+function clearTrash() {
+  dialog.error({
+    title: '清空回收站？',
+    content: `回收站中的 ${items.value.length} 项及其包含的所有内容将被永久删除，此操作无法撤销。`,
+    positiveText: '确认清空', negativeText: '取消',
+    async onPositiveClick() {
+      emptying.value = true
+      try {
+        await emptyTrash()
+        items.value = []
+        window.dispatchEvent(new Event('pan:storage-changed'))
+        message.success('回收站已清空')
+      } catch (value) {
+        message.error(errorText(value))
+      } finally {
+        emptying.value = false
+      }
+    },
+  })
+}
+
 onMounted(() => void load())
 </script>
 
 <template>
   <section class="page-shell">
-    <header class="page-header"><div><h1 class="page-title">回收站</h1><p class="page-subtitle">已删除内容保留 30 天，期间仍会占用空间</p></div></header>
+    <header class="page-header"><div><h1 class="page-title">回收站</h1><p class="page-subtitle">已删除内容保留 30 天，期间仍会占用空间</p></div><NButton v-if="items.length" type="error" secondary :loading="emptying" @click="clearTrash"><template #icon><AppIcon :icon="TrashX" /></template>清空回收站</NButton></header>
     <div class="panel trash-panel">
       <div v-if="loading" class="loading-list"><div v-for="n in 5" :key="n" class="skeleton-row"><NSkeleton circle size="small" /><NSkeleton text style="width: 36%" /><NSkeleton text style="width: 16%" /></div></div>
       <div v-else-if="error" class="state-view"><div><AppIcon :icon="Refresh" :size="30" /><h3>回收站暂时不可用</h3><p>{{ error }}</p><NButton @click="load">重新加载</NButton></div></div>

@@ -3,7 +3,7 @@ import uuid
 from collections import defaultdict
 from datetime import UTC, datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import AppError
@@ -253,3 +253,19 @@ async def permanently_delete_node(db: AsyncSession, user: User, node: Node) -> N
             delete_stored_file(item.storage_key)
     await db.delete(node)
     await db.commit()
+
+
+async def empty_trash(db: AsyncSession, user: User) -> int:
+    nodes = await all_owner_nodes(db, user.id)
+    trashed = [item for item in nodes if item.trashed_at is not None]
+    if not trashed:
+        return 0
+    trashed_ids = {item.id for item in trashed}
+    for item in trashed:
+        if item.kind == NodeKind.FILE:
+            delete_stored_file(item.storage_key)
+    await db.execute(
+        delete(Node).where(Node.id.in_(trashed_ids)).execution_options(synchronize_session=False)
+    )
+    await db.commit()
+    return len(trashed)

@@ -219,3 +219,31 @@ async def test_legacy_flat_file_migration(
         assert node.storage_key.count("/") == 4
         assert not legacy_path.exists()
         assert Path(settings.storage_path).joinpath(*node.storage_key.split("/")).read_bytes() == b"legacy data"
+
+
+async def test_empty_trash_removes_nested_files(
+    client: AsyncClient, auth_headers: dict[str, str], session_factory
+):
+    folder = await client.post(
+        "/api/v1/nodes/folders", json={"name": "待清空"}, headers=auth_headers
+    )
+    uploaded = await client.post(
+        "/api/v1/nodes/upload",
+        data={"parent_id": folder.json()["id"]},
+        files={"file": ("purge.txt", b"purge me", "text/plain")},
+        headers=auth_headers,
+    )
+    file_id = uuid.UUID(uploaded.json()["id"])
+    async with session_factory() as db:
+        node = await db.get(Node, file_id)
+        assert node is not None and node.storage_key is not None
+        stored_path = Path(settings.storage_path).joinpath(*node.storage_key.split("/"))
+    assert stored_path.exists()
+
+    assert (
+        await client.delete(f"/api/v1/nodes/{folder.json()['id']}", headers=auth_headers)
+    ).status_code == 204
+    assert len((await client.get("/api/v1/trash", headers=auth_headers)).json()) == 1
+    assert (await client.delete("/api/v1/trash", headers=auth_headers)).status_code == 204
+    assert (await client.get("/api/v1/trash", headers=auth_headers)).json() == []
+    assert not stored_path.exists()

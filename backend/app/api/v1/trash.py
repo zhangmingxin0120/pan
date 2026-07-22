@@ -32,6 +32,14 @@ async def list_trash(
     return roots[start : start + page_size]
 
 
+@router.delete("", status_code=204)
+async def empty_trash(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await node_service.empty_trash(db, user)
+
+
 @router.post("/{node_id}/restore", response_model=NodeResponse)
 async def restore(
     node_id: uuid.UUID,
@@ -50,4 +58,3 @@ async def permanent_delete(
 ):
     node = await node_service.get_owned_node(db, user.id, node_id, include_trashed=True)
     await node_service.permanently_delete_node(db, user, node)
-

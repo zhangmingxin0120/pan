@@ -70,3 +70,4 @@ export const getTrash = () => request.get<DriveNode[]>('/trash').then((response)
 export const restoreNode = (nodeId: string) =>
   request.post<DriveNode>(`/trash/${nodeId}/restore`).then((response) => response.data)
 export const permanentlyDeleteNode = (nodeId: string) => request.delete(`/trash/${nodeId}`)
+export const emptyTrash = () => request.delete('/trash')

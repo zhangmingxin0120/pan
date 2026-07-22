@@ -15,6 +15,7 @@ import {
 } from '@vicons/tabler'
 import {
   NButton,
+  NCheckbox,
   NDropdown,
   NInput,
   NModal,
@@ -62,12 +63,13 @@ const sortBy = ref<'name' | 'size' | 'updated_at'>('name')
 const sortOrder = ref<'asc' | 'desc'>('asc')
 const viewMode = ref<'list' | 'grid'>('list')
 const uploadTasks = ref<UploadTask[]>([])
+const selectedIds = ref<Set<string>>(new Set())
 
 const folderDialog = reactive({ show: false, name: '', loading: false })
 const renameDialog = reactive({ show: false, node: null as DriveNode | null, name: '', loading: false })
 const targetDialog = reactive({
   show: false,
-  node: null as DriveNode | null,
+  nodes: [] as DriveNode[],
   mode: 'move' as 'move' | 'copy',
   targetId: undefined as string | undefined,
   folders: [] as DriveNode[],
@@ -93,6 +95,13 @@ const currentFolderId = computed(() =>
 )
 const currentPage = computed(() => Number(route.query.page) || 1)
 const totalPages = computed(() => Math.max(1, Math.ceil((data.value?.total || 0) / 50)))
+const selectedNodes = computed(() =>
+  (data.value?.items || []).filter((node) => selectedIds.value.has(node.id)),
+)
+const allSelected = computed(
+  () => Boolean(data.value?.items.length) && selectedIds.value.size === data.value?.items.length,
+)
+const partlySelected = computed(() => selectedIds.value.size > 0 && !allSelected.value)
 
 const formatSize = (bytes: number) => {
   if (!bytes) return '—'
@@ -118,6 +127,7 @@ const errorText = (error: unknown) =>
   (error as { userMessage?: string }).userMessage || '操作失败，请重试'
 
 async function loadNodes() {
+  selectedIds.value = new Set()
   loading.value = true
   loadError.value = ''
   try {
@@ -134,6 +144,17 @@ async function loadNodes() {
   } finally {
     loading.value = false
   }
+}
+
+function toggleSelection(nodeId: string, checked: boolean) {
+  const next = new Set(selectedIds.value)
+  if (checked) next.add(nodeId)
+  else next.delete(nodeId)
+  selectedIds.value = next
+}
+
+function toggleAll(checked: boolean) {
+  selectedIds.value = checked ? new Set((data.value?.items || []).map((node) => node.id)) : new Set()
 }
 
 function openFolder(node: DriveNode) {
@@ -208,7 +229,12 @@ async function submitRename() {
 }
 
 async function openTarget(node: DriveNode, mode: 'move' | 'copy') {
-  targetDialog.node = node
+  await openTargets([node], mode)
+}
+
+async function openTargets(nodes: DriveNode[], mode: 'move' | 'copy') {
+  if (!nodes.length) return
+  targetDialog.nodes = nodes
   targetDialog.mode = mode
   targetDialog.targetId = undefined
   targetDialog.show = true
@@ -220,17 +246,26 @@ async function openTarget(node: DriveNode, mode: 'move' | 'copy') {
 }
 
 async function submitTarget() {
-  if (!targetDialog.node) return
+  if (!targetDialog.nodes.length) return
   targetDialog.loading = true
+  const results = []
+  for (const node of targetDialog.nodes) {
+    try {
+      if (targetDialog.mode === 'move') await moveNode(node.id, targetDialog.targetId)
+      else await copyNode(node.id, targetDialog.targetId)
+      results.push(true)
+    } catch {
+      results.push(false)
+    }
+  }
   try {
-    if (targetDialog.mode === 'move') await moveNode(targetDialog.node.id, targetDialog.targetId)
-    else await copyNode(targetDialog.node.id, targetDialog.targetId)
-    if (targetDialog.mode === 'copy') window.dispatchEvent(new Event('pan:storage-changed'))
+    const succeeded = results.filter(Boolean).length
+    const failed = results.length - succeeded
+    if (targetDialog.mode === 'copy' && succeeded) window.dispatchEvent(new Event('pan:storage-changed'))
     targetDialog.show = false
-    message.success(targetDialog.mode === 'move' ? '已移动' : '已复制')
+    if (failed) message.warning(`已${targetDialog.mode === 'move' ? '移动' : '复制'} ${succeeded} 项，${failed} 项失败`)
+    else message.success(`已${targetDialog.mode === 'move' ? '移动' : '复制'} ${succeeded} 项`)
     await loadNodes()
-  } catch (error) {
-    message.error(errorText(error))
   } finally {
     targetDialog.loading = false
   }
@@ -250,6 +285,25 @@ function confirmDelete(node: DriveNode) {
       } catch (error) {
         message.error(errorText(error))
       }
+    },
+  })
+}
+
+function confirmBatchDelete() {
+  const nodes = selectedNodes.value
+  if (!nodes.length) return
+  dialog.warning({
+    title: `将 ${nodes.length} 项移到回收站？`,
+    content: '选中的文件和文件夹将移到回收站，并保留 30 天。',
+    positiveText: '移到回收站',
+    negativeText: '取消',
+    async onPositiveClick() {
+      const results = await Promise.allSettled(nodes.map((node) => deleteNode(node.id)))
+      const succeeded = results.filter((result) => result.status === 'fulfilled').length
+      const failed = results.length - succeeded
+      if (failed) message.warning(`已删除 ${succeeded} 项，${failed} 项失败`)
+      else message.success(`已将 ${succeeded} 项移到回收站`)
+      await loadNodes()
     },
   })
 }
@@ -421,6 +475,15 @@ void nextTick()
       </div>
     </div>
 
+    <div v-if="selectedNodes.length" class="batch-bar">
+      <div><strong>已选择 {{ selectedNodes.length }} 项</strong><NButton text size="small" @click="selectedIds = new Set()">取消选择</NButton></div>
+      <div>
+        <NButton size="small" @click="openTargets(selectedNodes, 'move')">移动到…</NButton>
+        <NButton size="small" @click="openTargets(selectedNodes, 'copy')">复制到…</NButton>
+        <NButton size="small" type="error" secondary @click="confirmBatchDelete">移到回收站</NButton>
+      </div>
+    </div>
+
     <div class="panel file-panel">
       <div v-if="loading" class="loading-list">
         <div v-for="index in 6" :key="index" class="skeleton-row">
@@ -434,8 +497,9 @@ void nextTick()
         <div><AppIcon :icon="Upload" :size="32" /><h3>{{ search ? '没有找到匹配内容' : '这个文件夹还是空的' }}</h3><p>{{ search ? '换个关键词，或清空搜索条件。' : '上传文件或新建文件夹，开始整理资料。' }}</p><NButton v-if="!search" type="primary" @click="fileInput?.click()">上传文件</NButton><NButton v-else @click="search = ''; loadNodes()">清空搜索</NButton></div>
       </div>
       <template v-else-if="viewMode === 'list'">
-        <div class="file-row file-row--head"><span>名称</span><span>大小</span><span>更新时间</span><span></span></div>
-        <div v-for="node in data.items" :key="node.id" class="file-row" @dblclick="preview(node)">
+        <div class="file-row file-row--head"><NCheckbox :checked="allSelected" :indeterminate="partlySelected" aria-label="选择当前页全部内容" @update:checked="toggleAll" /><span>名称</span><span>大小</span><span>更新时间</span><span></span></div>
+        <div v-for="node in data.items" :key="node.id" class="file-row" :class="{ 'file-row--selected': selectedIds.has(node.id) }" @dblclick="preview(node)">
+          <NCheckbox :checked="selectedIds.has(node.id)" :aria-label="`选择 ${node.name}`" @click.stop @update:checked="(checked) => toggleSelection(node.id, checked)" />
           <button class="file-name" type="button" @click="preview(node)"><FileTypeIcon :node="node" /><span><strong>{{ node.name }}</strong><small>{{ node.kind === 'folder' ? '文件夹' : node.content_type || '文件' }}</small></span></button>
           <span class="file-meta">{{ node.kind === 'folder' ? '—' : formatSize(node.size_bytes) }}</span>
           <span class="file-meta">{{ formatDate(node.updated_at) }}</span>
@@ -445,8 +509,8 @@ void nextTick()
         </div>
       </template>
       <div v-else class="file-grid">
-        <article v-for="node in data.items" :key="node.id" class="file-card" @dblclick="preview(node)">
-          <div class="file-card-head"><FileTypeIcon :node="node" :size="28" /><NDropdown trigger="click" :options="actionOptions(node)" @select="(key) => handleAction(key, node)"><NButton quaternary circle size="small" aria-label="更多操作"><template #icon><AppIcon :icon="DotsVertical" :size="17" /></template></NButton></NDropdown></div>
+        <article v-for="node in data.items" :key="node.id" class="file-card" :class="{ 'file-card--selected': selectedIds.has(node.id) }" @dblclick="preview(node)">
+          <div class="file-card-head"><NCheckbox :checked="selectedIds.has(node.id)" :aria-label="`选择 ${node.name}`" @click.stop @update:checked="(checked) => toggleSelection(node.id, checked)" /><FileTypeIcon :node="node" :size="28" /><NDropdown trigger="click" :options="actionOptions(node)" @select="(key) => handleAction(key, node)"><NButton quaternary circle size="small" aria-label="更多操作"><template #icon><AppIcon :icon="DotsVertical" :size="17" /></template></NButton></NDropdown></div>
           <button type="button" @click="preview(node)"><strong>{{ node.name }}</strong><small>{{ node.kind === 'folder' ? '文件夹' : `${formatSize(node.size_bytes)} · ${formatDate(node.updated_at)}` }}</small></button>
         </article>
       </div>
@@ -468,9 +532,9 @@ void nextTick()
     <NModal v-model:show="renameDialog.show" preset="dialog" title="重命名" positive-text="保存" negative-text="取消" :loading="renameDialog.loading" @positive-click="submitRename">
       <NInput v-model:value="renameDialog.name" autofocus maxlength="255" @keyup.enter="submitRename" />
     </NModal>
-    <NModal v-model:show="targetDialog.show" preset="dialog" :title="targetDialog.mode === 'move' ? '移动到' : '复制到'" :positive-text="targetDialog.mode === 'move' ? '移动' : '复制'" negative-text="取消" :loading="targetDialog.loading" @positive-click="submitTarget">
+    <NModal v-model:show="targetDialog.show" preset="dialog" :title="`${targetDialog.mode === 'move' ? '移动' : '复制'} ${targetDialog.nodes.length} 项到`" :positive-text="targetDialog.mode === 'move' ? '移动' : '复制'" negative-text="取消" :loading="targetDialog.loading" @positive-click="submitTarget">
       <p class="dialog-tip">选择目标文件夹；不选择时使用根目录。</p>
-      <NSelect v-model:value="targetDialog.targetId" clearable filterable placeholder="我的文件（根目录）" :options="targetDialog.folders.filter((item) => item.id !== targetDialog.node?.id).map((item) => ({ label: item.is_root ? '我的文件（根目录）' : item.name, value: item.id }))" />
+      <NSelect v-model:value="targetDialog.targetId" clearable filterable placeholder="我的文件（根目录）" :options="targetDialog.folders.filter((item) => !targetDialog.nodes.some((node) => node.id === item.id)).map((item) => ({ label: item.is_root ? '我的文件（根目录）' : item.name, value: item.id }))" />
     </NModal>
     <NModal v-model:show="shareDialog.show" preset="dialog" title="创建只读分享" :positive-text="shareDialog.link ? undefined : '创建分享'" negative-text="关闭" :loading="shareDialog.loading" @positive-click="shareDialog.link ? undefined : submitShare()">
       <template v-if="!shareDialog.link"><p class="dialog-tip">持有链接的人可以在有效期内预览和下载“{{ shareDialog.node?.name }}”。</p><NSelect v-model:value="shareDialog.days" :options="[{ label: '1 天', value: 1 }, { label: '7 天', value: 7 }, { label: '30 天', value: 30 }]" /></template>
@@ -501,14 +565,18 @@ void nextTick()
 .breadcrumbs button:hover:not(:disabled) { background: $primary-soft; color: $primary; }
 .breadcrumbs button:disabled { color: $text; cursor: default; }
 .toolbar { justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+.batch-bar { min-height: 52px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 8px 14px; margin: -4px 0 12px; border: 1px solid #b9d8cf; border-radius: $radius-md; background: $primary-soft; }
+.batch-bar > div { display: flex; align-items: center; gap: 8px; }
+.batch-bar strong { color: $primary; font-size: 13px; }
 .search-input { width: min(360px, 100%); }
 .toolbar-actions { gap: 6px; flex: 0 0 auto; }
 .view-toggle { display: flex; padding: 3px; background: #e9eeeb; border-radius: 9px; }
 .view-toggle button { width: 32px; height: 30px; display: grid; place-items: center; padding: 0; border: 0; color: $text-muted; background: transparent; border-radius: 6px; cursor: pointer; }
 .view-toggle button.active { color: $text; background: $surface; box-shadow: 0 1px 2px rgba(20, 34, 29, 0.08); }
 .file-panel { overflow: hidden; }
-.file-row { min-width: 640px; display: grid; grid-template-columns: minmax(260px, 1fr) 120px 160px 48px; align-items: center; min-height: 62px; padding: 0 16px; border-top: 1px solid $border; }
+.file-row { min-width: 680px; display: grid; grid-template-columns: 36px minmax(260px, 1fr) 120px 160px 48px; align-items: center; min-height: 62px; padding: 0 16px; border-top: 1px solid $border; }
 .file-row:not(.file-row--head):hover { background: $surface-muted; }
+.file-row--selected { background: $primary-soft; }
 .file-row--head { min-height: 44px; border-top: 0; color: $text-muted; background: $surface-muted; font-size: 12px; font-weight: 500; }
 .file-name { min-width: 0; display: flex; align-items: center; gap: 10px; padding: 0; border: 0; background: transparent; color: $text; cursor: pointer; text-align: left; }
 .file-name > span:last-child { min-width: 0; display: grid; }
@@ -521,7 +589,9 @@ void nextTick()
 .file-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; padding: 16px; }
 .file-card { min-width: 0; padding: 14px; border: 1px solid $border; border-radius: $radius-md; background: $surface; }
 .file-card:hover { border-color: #b8c7c1; background: $surface-muted; }
-.file-card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.file-card--selected { border-color: #8dbdaf; background: $primary-soft; }
+.file-card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.file-card-head :deep(.n-dropdown-trigger) { margin-left: auto; }
 .file-card > button { width: 100%; display: grid; gap: 3px; padding: 0; border: 0; background: transparent; color: $text; text-align: left; cursor: pointer; }
 .file-card strong, .file-card small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .file-card strong { font-weight: 520; }
@@ -549,14 +619,16 @@ void nextTick()
   .search-input { width: 100%; }
   .toolbar-actions { justify-content: flex-end; }
   .file-panel { overflow-x: auto; }
-  .file-row { grid-template-columns: minmax(250px, 1fr) 110px 48px; }
-  .file-row > :nth-child(3) { display: none; }
+  .batch-bar { align-items: stretch; flex-direction: column; }
+  .batch-bar > div:last-child { flex-wrap: wrap; }
+  .file-row { grid-template-columns: 36px minmax(250px, 1fr) 110px 48px; }
+  .file-row > :nth-child(4) { display: none; }
 }
 
 @media (max-width: 520px) {
-  .file-row { min-width: 0; grid-template-columns: minmax(0, 1fr) 44px; }
-  .file-row > :nth-child(2), .file-row > :nth-child(3) { display: none; }
-  .file-row--head > :first-child { display: block; }
+  .file-row { min-width: 0; grid-template-columns: 36px minmax(0, 1fr) 44px; }
+  .file-row > :nth-child(3), .file-row > :nth-child(4) { display: none; }
+  .file-row--head > :nth-child(2) { display: block; }
   .toolbar-actions :deep(.n-button) { display: none; }
   .upload-tray { right: 16px; bottom: 16px; }
 }
