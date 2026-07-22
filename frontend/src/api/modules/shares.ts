@@ -1,7 +1,7 @@
 import request from '@/api/request'
 import type { PublicShare, Share, ShareListResponse } from '@/types'
 
-export const createShare = (nodeId: string, expiresInDays = 7) =>
+export const createShare = (nodeId: string, expiresInDays: number | null = 7) =>
   request
     .post<Share>('/shares', { node_id: nodeId, expires_in_days: expiresInDays })
     .then((response) => response.data)
@@ -18,4 +18,3 @@ export const getPublicShare = (token: string, parentId?: string) =>
 
 export const publicFileUrl = (token: string, nodeId: string, preview = false) =>
   `${request.defaults.baseURL}/public/shares/${token}/nodes/${nodeId}/${preview ? 'preview' : 'download'}`
-

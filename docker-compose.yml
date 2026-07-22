@@ -24,7 +24,7 @@ services:
       SECRET_KEY: ${SECRET_KEY:-local-development-secret-change-before-production}
       STORAGE_PATH: /data/files
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080,http://localhost:5173}
-      DEFAULT_QUOTA_BYTES: ${DEFAULT_QUOTA_BYTES:-10737418240}
+      DEFAULT_QUOTA_BYTES: ${DEFAULT_QUOTA_BYTES:-5368709120}
       MAX_FILE_SIZE_BYTES: ${MAX_FILE_SIZE_BYTES:-1073741824}
       ADMIN_USERNAME: ${ADMIN_USERNAME:-administrator}
       ADMIN_INITIAL_PASSWORD: ${ADMIN_INITIAL_PASSWORD:-123456}

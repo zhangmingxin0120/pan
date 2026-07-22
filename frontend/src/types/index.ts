@@ -75,7 +75,7 @@ export interface Share {
   id: string
   token: string
   node: DriveNode
-  expires_at: string
+  expires_at: string | null
   revoked_at: string | null
   created_at: string
   is_active: boolean
@@ -94,7 +94,7 @@ export interface PublicShare {
   current_folder: DriveNode | null
   breadcrumbs: Breadcrumb[]
   items: DriveNode[]
-  expires_at: string
+  expires_at: string | null
   owner_name: string
 }
 

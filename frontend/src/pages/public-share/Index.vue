@@ -61,7 +61,7 @@ onMounted(() => void load())
     <section v-if="loading" class="public-content"><NSkeleton text :repeat="7" /></section>
     <section v-else-if="error" class="public-content state-view"><div><AppIcon :icon="Unlink" :size="34" /><h3>分享不可用</h3><p>{{ error }}</p><NButton @click="load"><template #icon><AppIcon :icon="Refresh" /></template>重新加载</NButton></div></section>
     <section v-else-if="data" class="public-content">
-      <div class="share-heading"><div><span class="eyebrow">{{ data.owner_name }} 分享给你</span><h1>{{ data.root.name }}</h1><p>只读分享 · 有效期至 {{ formatDate(data.expires_at) }}</p></div><a v-if="data.root.kind === 'file'" :href="publicFileUrl(token, data.root.id)" download><NButton type="primary"><template #icon><AppIcon :icon="Download" /></template>下载文件</NButton></a></div>
+      <div class="share-heading"><div><span class="eyebrow">{{ data.owner_name }} 分享给你</span><h1>{{ data.root.name }}</h1><p>只读分享 · {{ data.expires_at ? `有效期至 ${formatDate(data.expires_at)}` : '永久有效' }}</p></div><a v-if="data.root.kind === 'file'" :href="publicFileUrl(token, data.root.id)" download><NButton type="primary"><template #icon><AppIcon :icon="Download" /></template>下载文件</NButton></a></div>
       <div v-if="data.root.kind === 'folder'" class="share-panel">
         <div class="breadcrumbs"><template v-for="(item, index) in data.breadcrumbs" :key="item.id"><AppIcon v-if="index > 0" :icon="ChevronRight" :size="15" /><button type="button" :disabled="index === data.breadcrumbs.length - 1" @click="goBreadcrumb(item.id, index)">{{ item.name }}</button></template></div>
         <div v-if="!data.items.length" class="state-view"><div><h3>这个文件夹是空的</h3><p>分享者还没有在这里放入内容。</p></div></div>

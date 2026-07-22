@@ -74,7 +74,7 @@ onMounted(() => void load())
         <div class="share-row share-row--head"><span>分享内容</span><span>有效期</span><span>状态</span><span></span></div>
         <div v-for="share in shares" :key="share.id" class="share-row">
           <div class="share-name"><FileTypeIcon :node="share.node" /><span><strong>{{ share.node.name }}</strong><small>创建于 {{ formatDate(share.created_at) }}</small></span></div>
-          <span class="share-date">至 {{ formatDate(share.expires_at) }}</span>
+          <span class="share-date">{{ share.expires_at ? `至 ${formatDate(share.expires_at)}` : '永久有效' }}</span>
           <NTag :type="share.is_active ? 'success' : 'default'" size="small" round>{{ share.is_active ? '有效' : '已失效' }}</NTag>
           <div class="row-actions">
             <NButton v-if="share.is_active" quaternary circle aria-label="复制分享链接" @click="copyLink(share)"><template #icon><AppIcon :icon="Copy" /></template></NButton>
@@ -102,4 +102,3 @@ onMounted(() => void load())
 .skeleton-row { height: 66px; display: flex; align-items: center; gap: 24px; border-bottom: 1px solid $border; }
 @media (max-width: 720px) { .share-panel { overflow-x: auto; } .share-row { min-width: 650px; } }
 </style>
-

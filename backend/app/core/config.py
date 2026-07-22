@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 60 * 24 * 7
     storage_path: str = "/data/files"
     cors_origins: str = "http://localhost:8080,http://localhost:5173"
-    default_quota_bytes: int = 10 * 1024 * 1024 * 1024
+    default_quota_bytes: int = 5 * 1024 * 1024 * 1024
     max_file_size_bytes: int = 1024 * 1024 * 1024
     share_default_days: int = 7
     recycle_retention_days: int = 30

@@ -39,7 +39,7 @@ def share_response(share: Share, node: Node) -> ShareResponse:
         revoked_at=share.revoked_at,
         created_at=share.created_at,
         is_active=share.revoked_at is None
-        and share.expires_at > utc_now_for(share.expires_at)
+        and (share.expires_at is None or share.expires_at > utc_now_for(share.expires_at))
         and node.trashed_at is None,
     )
 
@@ -55,7 +55,11 @@ async def create_share(
         owner_id=user.id,
         node_id=node.id,
         token=secrets.token_urlsafe(24),
-        expires_at=datetime.now(UTC) + timedelta(days=payload.expires_in_days),
+        expires_at=(
+            datetime.now(UTC) + timedelta(days=payload.expires_in_days)
+            if payload.expires_in_days is not None
+            else None
+        ),
     )
     db.add(share)
     await db.commit()
@@ -114,7 +118,11 @@ async def get_active_share(db: AsyncSession, token: str) -> tuple[Share, Node, U
     if not row:
         raise AppError(404, "SHARE_NOT_FOUND", "分享不存在或已失效")
     share, root, owner = row
-    if share.revoked_at or share.expires_at <= utc_now_for(share.expires_at) or root.trashed_at:
+    if (
+        share.revoked_at
+        or (share.expires_at is not None and share.expires_at <= utc_now_for(share.expires_at))
+        or root.trashed_at
+    ):
         raise AppError(410, "SHARE_EXPIRED", "分享不存在或已失效")
     return share, root, owner
 

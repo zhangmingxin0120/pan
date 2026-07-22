@@ -351,7 +351,10 @@ async function submitShare() {
   if (!shareDialog.node) return
   shareDialog.loading = true
   try {
-    const share = await createShare(shareDialog.node.id, shareDialog.days)
+    const share = await createShare(
+      shareDialog.node.id,
+      shareDialog.days === 0 ? null : shareDialog.days,
+    )
     shareDialog.link = `${window.location.origin}/s/${share.token}`
   } catch (error) {
     message.error(errorText(error))
@@ -537,8 +540,8 @@ void nextTick()
       <NSelect v-model:value="targetDialog.targetId" clearable filterable placeholder="我的文件（根目录）" :options="targetDialog.folders.filter((item) => !targetDialog.nodes.some((node) => node.id === item.id)).map((item) => ({ label: item.is_root ? '我的文件（根目录）' : item.name, value: item.id }))" />
     </NModal>
     <NModal v-model:show="shareDialog.show" preset="dialog" title="创建只读分享" :positive-text="shareDialog.link ? undefined : '创建分享'" negative-text="关闭" :loading="shareDialog.loading" @positive-click="shareDialog.link ? undefined : submitShare()">
-      <template v-if="!shareDialog.link"><p class="dialog-tip">持有链接的人可以在有效期内预览和下载“{{ shareDialog.node?.name }}”。</p><NSelect v-model:value="shareDialog.days" :options="[{ label: '1 天', value: 1 }, { label: '7 天', value: 7 }, { label: '30 天', value: 30 }]" /></template>
-      <template v-else><p class="dialog-tip">分享已创建，链接将在 {{ shareDialog.days }} 天后失效。</p><NInput :value="shareDialog.link" readonly><template #suffix><NButton text type="primary" @click="copyShareLink">复制</NButton></template></NInput></template>
+      <template v-if="!shareDialog.link"><p class="dialog-tip">持有链接的人可以预览和下载“{{ shareDialog.node?.name }}”。</p><NSelect v-model:value="shareDialog.days" :options="[{ label: '1 天', value: 1 }, { label: '7 天', value: 7 }, { label: '30 天', value: 30 }, { label: '永久有效', value: 0 }]" /></template>
+      <template v-else><p class="dialog-tip">{{ shareDialog.days === 0 ? '永久分享已创建，手动取消前链接会一直有效。' : `分享已创建，链接将在 ${shareDialog.days} 天后失效。` }}</p><NInput :value="shareDialog.link" readonly><template #suffix><NButton text type="primary" @click="copyShareLink">复制</NButton></template></NInput></template>
     </NModal>
     <NModal v-model:show="previewDialog.show" class="preview-modal" preset="card" :title="previewDialog.node?.name" style="width: min(960px, calc(100vw - 32px))">
       <div class="preview-body">

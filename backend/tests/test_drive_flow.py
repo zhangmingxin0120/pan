@@ -12,6 +12,10 @@ from app.services.storage_migration import migrate_legacy_storage_layout
 async def test_file_lifecycle_and_share(
     client: AsyncClient, auth_headers: dict[str, str], session_factory
 ):
+    usage_response = await client.get("/api/v1/storage/usage", headers=auth_headers)
+    assert usage_response.status_code == 200
+    assert usage_response.json()["quota_bytes"] == 5 * 1024 * 1024 * 1024
+
     root_response = await client.get("/api/v1/nodes", headers=auth_headers)
     assert root_response.status_code == 200
     root_id = root_response.json()["current_folder"]["id"]
@@ -69,6 +73,19 @@ async def test_file_lifecycle_and_share(
     public_response = await client.get(f"/api/v1/public/shares/{token}")
     assert public_response.status_code == 200
     assert public_response.json()["root"]["name"] == "readme.txt"
+
+    permanent_share = await client.post(
+        "/api/v1/shares",
+        json={"node_id": file_id, "expires_in_days": None},
+        headers=auth_headers,
+    )
+    assert permanent_share.status_code == 201
+    assert permanent_share.json()["expires_at"] is None
+    assert permanent_share.json()["is_active"] is True
+    permanent_token = permanent_share.json()["token"]
+    permanent_public = await client.get(f"/api/v1/public/shares/{permanent_token}")
+    assert permanent_public.status_code == 200
+    assert permanent_public.json()["expires_at"] is None
 
     delete_response = await client.delete(f"/api/v1/nodes/{file_id}", headers=auth_headers)
     assert delete_response.status_code == 204
