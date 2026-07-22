@@ -1,4 +1,5 @@
 import secrets
+import shutil
 import uuid
 
 from fastapi import APIRouter, Depends, Query
@@ -24,6 +25,7 @@ from app.schemas.admin import (
     AdminUserResponse,
     AdminUserUpdateRequest,
 )
+from app.services.storage import storage_root
 from app.services.system_settings import get_system_settings
 
 router = APIRouter(prefix="/admin", tags=["管理员"])
@@ -63,6 +65,7 @@ async def admin_login(payload: AdminLoginRequest, db: AsyncSession = Depends(get
 @router.get("/overview", response_model=AdminOverviewResponse)
 async def overview(_: User = Depends(get_admin_user), db: AsyncSession = Depends(get_db)):
     regular_user = User.is_admin.is_(False)
+    disk = shutil.disk_usage(storage_root())
     return AdminOverviewResponse(
         user_count=int(await db.scalar(select(func.count(User.id)).where(regular_user)) or 0),
         active_user_count=int(
@@ -75,6 +78,8 @@ async def overview(_: User = Depends(get_admin_user), db: AsyncSession = Depends
             )
             or 0
         ),
+        disk_total_bytes=disk.total,
+        disk_free_bytes=disk.free,
     )
 
 

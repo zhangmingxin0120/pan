@@ -55,6 +55,17 @@ const formatSize = (bytes: number) => {
 const formatDate = (value: string) =>
   new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium' }).format(new Date(value))
 
+const diskFreePercent = computed(() => {
+  if (!overview.value?.disk_total_bytes) return 0
+  return (overview.value.disk_free_bytes / overview.value.disk_total_bytes) * 100
+})
+
+const diskHealth = computed(() => {
+  if (diskFreePercent.value <= 5) return { label: '即将用满', type: 'error' as const }
+  if (diskFreePercent.value <= 15) return { label: '空间偏低', type: 'warning' as const }
+  return { label: '空间充足', type: 'success' as const }
+})
+
 const errorText = (error: unknown) =>
   (error as { userMessage?: string }).userMessage || '操作失败，请重试'
 
@@ -261,7 +272,15 @@ onMounted(() => void load())
         <div class="stat"><AppIcon :icon="Users" /><span><small>用户总数</small><strong>{{ overview?.user_count ?? '—' }}</strong></span></div>
         <div class="stat"><AppIcon :icon="Database" /><span><small>正常用户</small><strong>{{ overview?.active_user_count ?? '—' }}</strong></span></div>
         <div class="stat"><AppIcon :icon="File" /><span><small>文件总数</small><strong>{{ overview?.file_count ?? '—' }}</strong></span></div>
-        <div class="stat"><AppIcon :icon="Database" /><span><small>存储占用</small><strong>{{ overview ? formatSize(overview.storage_bytes) : '—' }}</strong></span></div>
+        <div class="stat disk-stat">
+          <AppIcon :icon="Database" />
+          <span>
+            <small>磁盘剩余</small>
+            <strong>{{ overview ? formatSize(overview.disk_free_bytes) : '—' }}</strong>
+            <em v-if="overview">共 {{ formatSize(overview.disk_total_bytes) }} · 剩余 {{ diskFreePercent.toFixed(1) }}%</em>
+          </span>
+          <NTag v-if="overview" :type="diskHealth.type" size="small" round>{{ diskHealth.label }}</NTag>
+        </div>
       </div>
 
       <section class="registration-setting">
@@ -319,6 +338,7 @@ onMounted(() => void load())
 .account-actions { display: flex; align-items: center; gap: 8px; color: $text-secondary; font-size: 13px; }
 .content { width: min(1180px, calc(100% - 40px)); margin: 0 auto; padding: 34px 0 60px; }.content h1 { margin: 0; font-size: 27px; }.content > div > p { margin: 6px 0 0; color: $text-secondary; }
 .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin: 26px 0 16px; }.stat { display: flex; align-items: center; gap: 14px; padding: 20px; border: 1px solid $border; border-radius: $radius-lg; background: $surface; color: $primary; }.stat > span { display: grid; }.stat small { color: $text-muted; }.stat strong { margin-top: 3px; color: $text; font-size: 23px; }
+.disk-stat { position: relative; }.disk-stat em { color: $text-muted; font-size: 10px; font-style: normal; white-space: nowrap; }.disk-stat > .n-tag { position: absolute; top: 12px; right: 12px; }
 .registration-setting { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 17px 20px; margin-bottom: 16px; border: 1px solid $border; border-radius: $radius-lg; background: $surface; }.registration-setting > div { display: grid; gap: 3px; }.registration-setting span { color: $text-muted; font-size: 12px; }
 .users-panel { overflow: hidden; border: 1px solid $border; border-radius: $radius-lg; background: $surface; }.panel-head { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 18px 20px; border-bottom: 1px solid $border; }.panel-head h2 { margin: 0; font-size: 17px; }.panel-head span { color: $text-muted; font-size: 12px; }.panel-actions, :deep(.table-actions) { display: flex; align-items: center; gap: 8px; }.panel-actions :deep(.n-input) { width: 260px; }
 :deep(.user-cell) { display: grid; }:deep(.user-cell small) { color: $text-muted; }.form-stack, .credential-box { display: grid; gap: 14px; padding-top: 6px; }.form-stack label, .credential-box label { display: grid; gap: 6px; color: $text-secondary; font-size: 13px; }.credential-box p { margin: 0; padding: 10px 12px; color: $warning; background: #fff7ea; border-radius: $radius-md; }.credential-box small { color: $text-muted; }

@@ -16,6 +16,8 @@ export interface AdminOverview {
   active_user_count: number
   file_count: number
   storage_bytes: number
+  disk_total_bytes: number
+  disk_free_bytes: number
 }
 
 export interface AdminUser {

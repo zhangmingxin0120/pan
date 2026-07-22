@@ -9,6 +9,8 @@ class AdminOverviewResponse(BaseModel):
     active_user_count: int
     file_count: int
     storage_bytes: int
+    disk_total_bytes: int
+    disk_free_bytes: int
 
 
 class AdminUserResponse(BaseModel):

@@ -196,7 +196,10 @@ async def test_single_admin_requires_password_change(client: AsyncClient, sessio
     assert changed.status_code == 200
     assert changed.json()["user"]["must_change_password"] is False
     new_headers = {"Authorization": f"Bearer {changed.json()['access_token']}"}
-    assert (await client.get("/api/v1/admin/overview", headers=new_headers)).status_code == 200
+    overview = await client.get("/api/v1/admin/overview", headers=new_headers)
+    assert overview.status_code == 200
+    assert overview.json()["disk_total_bytes"] > 0
+    assert 0 <= overview.json()["disk_free_bytes"] <= overview.json()["disk_total_bytes"]
 
     regular = await client.post(
         "/api/v1/auth/register",
