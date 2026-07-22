@@ -33,7 +33,7 @@
 | users | email、name、password_hash、quota_bytes | email 大小写不敏感唯一 | 拥有 nodes/shares |
 | nodes | owner_id、parent_id、kind、name、size、storage_key、trashed_at | owner/parent/lower(name) 活跃唯一；父级索引 | 自引用目录树 |
 | shares | owner_id、node_id、token、expires_at、revoked_at | token 唯一 | 指向 node |
-| api_applications | user_id、root_node_id、key_prefix、key_hash、权限与累计用量 | key_prefix 唯一 | 指向 user 和授权根目录 |
+| api_applications | user_id、key_prefix、key_hash、权限与累计用量 | key_prefix 唯一 | 指向绑定用户 |
 
 - 建表方式：Alembic。
 - 事务边界：每个创建、上传、移动、复制、删除、恢复或分享操作独立事务。
@@ -46,13 +46,13 @@
 - 错误：`code / message / details`
 - 创建返回 201，删除返回 204；401/403/404/409/422 保持语义。
 
-主要资源：`/auth`、`/nodes`、`/trash`、`/shares`、`/public/shares`、`/storage`、`/open`。OpenAPI `/api/docs` 是字段级事实来源。
+主要资源：`/auth`、`/nodes`、`/trash`、`/shares`、`/public/shares`、`/storage`、`/open`。外部接口以产品化文档手册 `/api-docs` 为事实来源，生产服务不公开内部 Swagger 清单。
 
 ## 6. 权限与文件
 
 - 所有私有节点查询同时限定 `owner_id` 与当前状态，越权不泄露归属。
 - 分享访问只允许分享节点或文件夹后代，且每次检查到期、撤销和源节点状态。
-- API 应用只允许授权根目录及其后代，并独立检查读取、写入和删除权限；轮换或停用后旧密钥立即失效。
+- API 应用只允许访问绑定账号的资源，并独立检查读取、写入和删除权限；轮换或停用后旧密钥立即失效。
 - 文件名需通过业务校验；同级名称不区分大小写判重。
 - 默认单文件上限 1 GiB、用户总容量 5 GiB。
 - 实际文件保存在 `STORAGE_PATH`；下载文件名使用业务名称，磁盘路径永不使用用户输入。

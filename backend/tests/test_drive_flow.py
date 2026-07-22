@@ -291,7 +291,7 @@ async def test_single_admin_requires_password_change(client: AsyncClient, sessio
     assert reset_login.json()["user"]["must_change_password"] is True
 
 
-async def test_external_api_application_scope_permissions_and_usage(
+async def test_external_api_application_account_scope_findlist_and_usage(
     client: AsyncClient, auth_headers: dict[str, str], session_factory
 ):
     async with session_factory() as db:
@@ -317,8 +317,8 @@ async def test_external_api_application_scope_permissions_and_usage(
     me = await client.get("/api/v1/auth/me", headers=auth_headers)
     owner_id = me.json()["id"]
 
-    allowed = await client.post(
-        "/api/v1/nodes/folders", json={"name": "API 授权目录"}, headers=auth_headers
+    contracts = await client.post(
+        "/api/v1/nodes/folders", json={"name": "合同资料"}, headers=auth_headers
     )
     outside = await client.post(
         "/api/v1/nodes/folders", json={"name": "私有目录"}, headers=auth_headers
@@ -330,18 +330,20 @@ async def test_external_api_application_scope_permissions_and_usage(
         headers=auth_headers,
     )
 
-    folders = await client.get(
-        f"/api/v1/admin/integrations/users/{owner_id}/folders", headers=admin_headers
+    other = await client.post(
+        "/api/v1/auth/register",
+        json={"email": "separate@example.com", "name": "Separate", "password": "password123"},
     )
-    assert folders.status_code == 200
-    assert {item["path"] for item in folders.json()} >= {"/", "/API 授权目录", "/私有目录"}
+    other_headers = {"Authorization": f"Bearer {other.json()['access_token']}"}
+    other_root = (await client.get("/api/v1/nodes", headers=other_headers)).json()[
+        "current_folder"
+    ]
 
     created = await client.post(
         "/api/v1/admin/integrations",
         json={
             "name": "测试业务系统",
             "user_id": owner_id,
-            "root_node_id": allowed.json()["id"],
             "can_read": True,
             "can_write": True,
             "can_delete": True,
@@ -354,15 +356,41 @@ async def test_external_api_application_scope_permissions_and_usage(
     api_headers = {"Authorization": f"Bearer {api_key}"}
     assert api_key.startswith("pan_")
 
-    scoped_list = await client.get("/api/v1/open/nodes", headers=api_headers)
-    assert scoped_list.status_code == 200
-    assert scoped_list.json()["current_folder"]["id"] == allowed.json()["id"]
-    assert scoped_list.json()["items"] == []
-
-    leaked = await client.get(
-        f"/api/v1/open/nodes/{outside_file.json()['id']}", headers=api_headers
+    all_resources = await client.get("/api/v1/open/findlist", headers=api_headers)
+    assert all_resources.status_code == 200
+    assert {item["name"] for item in all_resources.json()["items"]} >= {
+        "我的文件",
+        "合同资料",
+        "私有目录",
+        "private.txt",
+    }
+    by_id = await client.get(
+        "/api/v1/open/findlist",
+        params={"node_id": outside_file.json()["id"]},
+        headers=api_headers,
     )
-    assert leaked.status_code == 404
+    assert [item["name"] for item in by_id.json()["items"]] == ["private.txt"]
+    by_parent = await client.get(
+        "/api/v1/open/findlist",
+        params={"parent_id": outside.json()["id"]},
+        headers=api_headers,
+    )
+    assert [item["name"] for item in by_parent.json()["items"]] == ["private.txt"]
+    by_keyword = await client.get(
+        "/api/v1/open/findlist", params={"keyword": "private"}, headers=api_headers
+    )
+    assert [item["name"] for item in by_keyword.json()["items"]] == ["private.txt"]
+
+    account_list = await client.get("/api/v1/open/nodes", headers=api_headers)
+    assert account_list.status_code == 200
+    assert {item["id"] for item in account_list.json()["items"]} >= {
+        contracts.json()["id"],
+        outside.json()["id"],
+    }
+    cross_account = await client.get(
+        f"/api/v1/open/nodes/{other_root['id']}", headers=api_headers
+    )
+    assert cross_account.status_code == 404
 
     uploaded = await client.post(
         "/api/v1/open/upload",
@@ -381,10 +409,11 @@ async def test_external_api_application_scope_permissions_and_usage(
         )
     ).status_code == 204
     immutable_root = await client.delete(
-        f"/api/v1/open/nodes/{allowed.json()['id']}", headers=api_headers
+        f"/api/v1/open/nodes/{account_list.json()['current_folder']['id']}",
+        headers=api_headers,
     )
     assert immutable_root.status_code == 422
-    assert immutable_root.json()["code"] == "API_ROOT_IMMUTABLE"
+    assert immutable_root.json()["code"] == "ROOT_IMMUTABLE"
 
     applications = await client.get("/api/v1/admin/integrations", headers=admin_headers)
     usage = applications.json()["items"][0]
@@ -415,7 +444,6 @@ async def test_external_api_application_scope_permissions_and_usage(
         json={
             "name": "只读系统",
             "user_id": owner_id,
-            "root_node_id": allowed.json()["id"],
             "can_read": True,
             "can_write": False,
             "can_delete": False,

@@ -18,6 +18,7 @@ from app.schemas.node import (
     RenameRequest,
     TargetFolderRequest,
 )
+from app.schemas.integration import FindListResponse
 from app.services import nodes as node_service
 from app.services.storage import delete_stored_file, save_upload, storage_path, stored_file_exists
 
@@ -34,29 +35,65 @@ def require_permission(context: ApiContext, permission: str) -> None:
         raise AppError(403, "API_PERMISSION_DENIED", f"API 应用没有 {permission} 权限")
 
 
-async def scope_ids(db: AsyncSession, context: ApiContext) -> set[uuid.UUID]:
-    nodes = await node_service.all_owner_nodes(db, context.user.id)
-    return node_service.descendant_ids(nodes, context.root_node.id)
-
-
 async def scoped_node(
     db: AsyncSession, context: ApiContext, node_id: uuid.UUID, *, allow_root: bool = True
 ) -> Node:
     node = await node_service.get_owned_node(db, context.user.id, node_id)
-    if node.id not in await scope_ids(db, context):
-        raise AppError(404, "NODE_NOT_FOUND", "内容不存在或不在授权目录内")
-    if not allow_root and node.id == context.root_node.id:
-        raise AppError(422, "API_ROOT_IMMUTABLE", "API 授权根目录不能修改")
+    if not allow_root and node.is_root:
+        raise AppError(422, "ROOT_IMMUTABLE", "账号根目录不能修改")
     return node
 
 
 async def scoped_folder(
     db: AsyncSession, context: ApiContext, folder_id: uuid.UUID | None
 ) -> Node:
-    folder = context.root_node if folder_id is None else await scoped_node(db, context, folder_id)
+    folder = await node_service.resolve_folder(db, context.user.id, folder_id)
     if folder.kind != NodeKind.FOLDER:
         raise AppError(422, "NOT_A_FOLDER", "目标位置不是文件夹")
     return folder
+
+
+@router.get("/findlist", response_model=FindListResponse)
+async def find_list(
+    node_id: uuid.UUID | None = Query(
+        default=None, description="查询指定文件或文件夹的 UUID"
+    ),
+    parent_id: uuid.UUID | None = Query(
+        default=None, description="只查询指定文件夹的直接子内容"
+    ),
+    keyword: str | None = Query(
+        default=None, max_length=100, description="在账号全部资源中按名称搜索"
+    ),
+    context: ApiContext = Depends(get_api_context),
+    db: AsyncSession = Depends(get_db),
+):
+    """不传参数返回账号全部有效资源，也可按节点、父目录或名称精确查询。"""
+    require_permission(context, "read")
+    if node_id and parent_id:
+        raise AppError(422, "INVALID_QUERY", "node_id 和 parent_id 不能同时使用")
+    filters = [Node.owner_id == context.user.id, Node.trashed_at.is_(None)]
+    if node_id:
+        filters.append(Node.id == node_id)
+    if parent_id:
+        parent = await scoped_folder(db, context, parent_id)
+        filters.append(Node.parent_id == parent.id)
+    if keyword and keyword.strip():
+        filters.append(Node.name.ilike(f"%{keyword.strip()}%"))
+    items = list(
+        (
+            await db.scalars(
+                select(Node)
+                .where(*filters)
+                .order_by(
+                    case((Node.kind == NodeKind.FOLDER, 0), else_=1),
+                    desc(Node.updated_at),
+                )
+            )
+        ).all()
+    )
+    if node_id and not items:
+        raise AppError(404, "NODE_NOT_FOUND", "内容不存在或无权访问")
+    return FindListResponse(items=items, total=len(items))
 
 
 @router.get("/nodes", response_model=NodeListResponse)
@@ -93,16 +130,12 @@ async def list_nodes(
         ).all()
     )
     path = await node_service.breadcrumbs(db, folder, context.user.id)
-    root_index = next(
-        (index for index, item in enumerate(path) if item.id == context.root_node.id), 0
-    )
-    visible_path = path[root_index:]
     return NodeListResponse(
         items=items,
         total=total,
         page=page,
         page_size=page_size,
-        breadcrumbs=[BreadcrumbItem(id=item.id, name=item.name) for item in visible_path],
+        breadcrumbs=[BreadcrumbItem(id=item.id, name=item.name) for item in path],
         current_folder=folder,
     )
 

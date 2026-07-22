@@ -3,16 +3,12 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field, model_validator
 
-
-class AdminFolderOption(BaseModel):
-    id: uuid.UUID
-    path: str
+from app.schemas.node import NodeResponse
 
 
 class ApiApplicationCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=80)
     user_id: uuid.UUID
-    root_node_id: uuid.UUID
     can_read: bool = True
     can_write: bool = False
     can_delete: bool = False
@@ -33,8 +29,6 @@ class ApiApplicationResponse(BaseModel):
     name: str
     user_id: uuid.UUID
     user_email: str
-    root_node_id: uuid.UUID
-    root_path: str
     key_prefix: str
     can_read: bool
     can_write: bool
@@ -60,3 +54,8 @@ class ApiApplicationSecretResponse(BaseModel):
 
 class ApiKeyRotateResponse(BaseModel):
     api_key: str
+
+
+class FindListResponse(BaseModel):
+    items: list[NodeResponse]
+    total: int

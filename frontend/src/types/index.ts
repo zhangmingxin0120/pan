@@ -39,18 +39,11 @@ export interface AdminSettings {
   registration_enabled: boolean
 }
 
-export interface IntegrationFolder {
-  id: string
-  path: string
-}
-
 export interface ApiApplication {
   id: string
   name: string
   user_id: string
   user_email: string
-  root_node_id: string
-  root_path: string
   key_prefix: string
   can_read: boolean
   can_write: boolean

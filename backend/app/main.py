@@ -23,8 +23,8 @@ app = FastAPI(
     title=settings.app_name,
     version="1.0.0",
     lifespan=lifespan,
-    docs_url="/api/docs",
-    openapi_url="/api/openapi.json",
+    docs_url=None,
+    openapi_url=None,
 )
 app.add_middleware(
     CORSMiddleware,

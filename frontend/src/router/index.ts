@@ -9,6 +9,7 @@ const router = createRouter({
     { path: '/change-password', name: 'change-password', component: () => import('@/pages/auth/ChangePassword.vue'), meta: { requiresAuth: true } },
     { path: '/admin/login', name: 'admin-login', component: () => import('@/pages/admin/Login.vue'), meta: { adminGuest: true } },
     { path: '/admin', name: 'admin', component: () => import('@/pages/admin/Index.vue'), meta: { requiresAuth: true, admin: true } },
+    { path: '/api-docs', name: 'api-docs', component: () => import('@/pages/api-docs/Index.vue'), meta: { public: true } },
     {
       path: '/',
       component: () => import('@/components/layout/AppLayout.vue'),
@@ -37,6 +38,7 @@ router.beforeEach(async (to) => {
   const authStore = useAuthStore()
   await authStore.initialize()
   if (!authStore.user) return { name: 'login' }
+  if (to.meta.public) return
   if (authStore.user.must_change_password && to.name !== 'change-password') {
     return { name: 'change-password' }
   }

@@ -13,9 +13,6 @@ class ApiApplication(Base):
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(80))
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
-    root_node_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("nodes.id", ondelete="CASCADE"), index=True
-    )
     key_prefix: Mapped[str] = mapped_column(String(16), unique=True, index=True)
     key_hash: Mapped[str] = mapped_column(String(64))
     can_read: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
@@ -32,4 +29,3 @@ class ApiApplication(Base):
     )
 
     user: Mapped["User"] = relationship(back_populates="api_applications")
-    root_node: Mapped["Node"] = relationship()

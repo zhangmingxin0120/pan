@@ -8,7 +8,6 @@ import type {
   ApiApplication,
   ApiApplicationList,
   ApiApplicationSecret,
-  IntegrationFolder,
   TemporaryPasswordResult,
 } from '@/types'
 
@@ -37,11 +36,6 @@ export const resetUserPassword = (id: string, password: string) =>
     .post<TemporaryPasswordResult>(`/admin/users/${id}/reset-password`, { password })
     .then((response) => response.data)
 
-export const getIntegrationFolders = (userId: string) =>
-  request
-    .get<IntegrationFolder[]>(`/admin/integrations/users/${userId}/folders`)
-    .then((response) => response.data)
-
 export const getApiApplications = () =>
   request
     .get<ApiApplicationList>('/admin/integrations')
@@ -50,7 +44,6 @@ export const getApiApplications = () =>
 export const createApiApplication = (payload: {
   name: string
   user_id: string
-  root_node_id: string
   can_read: boolean
   can_write: boolean
   can_delete: boolean

@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.errors import AppError
 from app.core.security import decode_access_token
-from app.models import ApiApplication, Node, User
+from app.models import ApiApplication, User
 from app.services.api_keys import api_key_hash, api_key_prefix
 
 bearer = HTTPBearer(auto_error=False)
@@ -56,7 +56,6 @@ async def get_admin_user(user: User = Depends(get_current_user)) -> User:
 class ApiContext:
     application: ApiApplication
     user: User
-    root_node: Node
     upload_bytes: int = 0
     download_bytes: int = 0
 
@@ -79,15 +78,11 @@ async def get_api_context(
     ):
         raise AppError(401, "INVALID_API_KEY", "API Key 无效")
     user = await db.get(User, application.user_id)
-    root = await db.get(Node, application.root_node_id)
     if not application.is_active:
         raise AppError(403, "API_APPLICATION_DISABLED", "API 应用已停用")
     if not user or not user.is_active:
         raise AppError(403, "ACCOUNT_DISABLED", "关联账号已停用")
-    if not root or root.trashed_at is not None:
-        raise AppError(403, "API_ROOT_UNAVAILABLE", "授权目录不可用")
-
-    context = ApiContext(application=application, user=user, root_node=root)
+    context = ApiContext(application=application, user=user)
     application_id = application.id
     failed = False
     try:

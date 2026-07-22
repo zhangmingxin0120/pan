@@ -15,26 +15,22 @@ import {
 import {
   createApiApplication,
   getApiApplications,
-  getIntegrationFolders,
   rotateApiApplicationKey,
   updateApiApplication,
 } from '@/api/modules/admin'
-import type { AdminUser, ApiApplication, IntegrationFolder } from '@/types'
+import type { AdminUser, ApiApplication } from '@/types'
 
 const props = defineProps<{ users: AdminUser[] }>()
 const message = useMessage()
 const dialog = useDialog()
 const applications = ref<ApiApplication[]>([])
 const loading = ref(true)
-const folders = ref<IntegrationFolder[]>([])
-const folderLoading = ref(false)
 
 const createDialog = reactive({
   show: false,
   loading: false,
   name: '',
   userId: null as string | null,
-  rootNodeId: null as string | null,
   canRead: true,
   canWrite: true,
   canDelete: false,
@@ -45,9 +41,6 @@ const userOptions = computed(() =>
   props.users
     .filter((user) => user.is_active)
     .map((user) => ({ label: `${user.name}（${user.email}）`, value: user.id })),
-)
-const folderOptions = computed(() =>
-  folders.value.map((folder) => ({ label: folder.path, value: folder.id })),
 )
 
 const formatSize = (bytes: number) => {
@@ -87,35 +80,19 @@ function openCreate() {
     show: true,
     name: '',
     userId: null,
-    rootNodeId: null,
     canRead: true,
     canWrite: true,
     canDelete: false,
   })
-  folders.value = []
 }
 
-async function selectUser(userId: string | null) {
+function selectUser(userId: string | null) {
   createDialog.userId = userId
-  createDialog.rootNodeId = null
-  folders.value = []
-  if (!userId) return
-  folderLoading.value = true
-  try {
-    folders.value = await getIntegrationFolders(userId)
-    const root = folders.value.find((folder) => folder.path === '/')
-    createDialog.rootNodeId = root?.id || folders.value[0]?.id || null
-  } catch (error) {
-    message.error(errorText(error))
-  } finally {
-    folderLoading.value = false
-  }
 }
 
 async function submitCreate() {
   if (!createDialog.name.trim()) return message.warning('请输入应用名称'), false
   if (!createDialog.userId) return message.warning('请选择关联账号'), false
-  if (!createDialog.rootNodeId) return message.warning('请选择授权目录'), false
   if (!createDialog.canRead && !createDialog.canWrite && !createDialog.canDelete) {
     return message.warning('至少选择一项权限'), false
   }
@@ -124,7 +101,6 @@ async function submitCreate() {
     const result = await createApiApplication({
       name: createDialog.name,
       user_id: createDialog.userId,
-      root_node_id: createDialog.rootNodeId,
       can_read: createDialog.canRead,
       can_write: createDialog.canWrite,
       can_delete: createDialog.canDelete,
@@ -184,9 +160,9 @@ const columns: DataTableColumns<ApiApplication> = [
     render: (row) => h('div', { class: 'stack-cell' }, [h('strong', row.name), h('small', row.key_prefix)]),
   },
   {
-    title: '账号与目录',
+    title: '关联账号',
     key: 'scope',
-    render: (row) => h('div', { class: 'stack-cell' }, [h('span', row.user_email), h('small', row.root_path)]),
+    render: (row) => h('span', row.user_email),
   },
   {
     title: '权限',
@@ -235,10 +211,10 @@ onMounted(() => void loadApplications())
     <div class="panel-head">
       <div>
         <h2>开放 API</h2>
-        <span>为外部系统授权指定账号和文件夹，密钥与用户登录相互独立</span>
+        <span>为外部系统绑定一个普通账号，API 可访问该账号的全部网盘资源</span>
       </div>
       <div class="panel-actions">
-        <NButton tag="a" href="/api/docs" target="_blank">接口文档</NButton>
+        <NButton tag="a" href="/api-docs" target="_blank">接口文档</NButton>
         <NButton type="primary" @click="openCreate">创建 API 应用</NButton>
       </div>
     </div>
@@ -247,8 +223,7 @@ onMounted(() => void loadApplications())
     <NModal v-model:show="createDialog.show" preset="dialog" title="创建 API 应用" positive-text="创建应用" negative-text="取消" :loading="createDialog.loading" :mask-closable="false" @positive-click="submitCreate">
       <div class="form-stack">
         <label><span>应用名称</span><NInput v-model:value="createDialog.name" maxlength="80" placeholder="例如：合同管理系统" /></label>
-        <label><span>关联账号</span><NSelect :value="createDialog.userId" :options="userOptions" filterable placeholder="选择普通用户" @update:value="selectUser" /></label>
-        <label><span>授权目录</span><NSelect v-model:value="createDialog.rootNodeId" :options="folderOptions" :loading="folderLoading" filterable placeholder="该应用只能访问此目录及其子目录" /></label>
+        <label><span>关联账号</span><NSelect :value="createDialog.userId" :options="userOptions" filterable placeholder="API 将访问该账号的全部文件" @update:value="selectUser" /></label>
         <div class="permission-list">
           <span>接口权限</span>
           <label><NSwitch v-model:value="createDialog.canRead" />读取和下载</label>
