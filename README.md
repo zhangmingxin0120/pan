@@ -227,6 +227,17 @@ Pan 有两类持久化数据：
 /opt/pan/data/files
 ```
 
+实体文件不会全部平铺在一个目录中，而是采用“UTC 日期 + UUID 前缀分片”的布局：
+
+```text
+data/files/YYYY/MM/DD/{UUID前2位}/{完整UUID}
+
+# 示例
+data/files/2026/07/22/03/03ffc894940646b6ad8482d0516122e6
+```
+
+日期分区方便增量备份，UUID 前缀将同一天的文件均匀分散到 256 个目录中，避免单目录文件过多。用户看到的文件夹、文件名和层级由 PostgreSQL 管理，因此移动或重命名网盘文件不会移动实体文件。旧版本的平铺文件会在后端启动时自动、可恢复地迁移到新布局。
+
 建议同时备份文件目录和 PostgreSQL。示例：
 
 ```bash
@@ -304,7 +315,7 @@ pytest
 pan/
 ├─ frontend/           Vue 3 前端与容器内 Nginx 配置
 ├─ backend/            FastAPI、SQLAlchemy、Alembic 与测试
-├─ data/files/         用户上传文件，不提交到 Git
+├─ data/files/         按日期和 UUID 分片保存的上传文件，不提交到 Git
 ├─ docker-compose.yml  PostgreSQL、后端和前端编排
 ├─ restart.sh          Linux / macOS 启动脚本
 ├─ restart.cmd         Windows 启动脚本

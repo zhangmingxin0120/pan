@@ -10,11 +10,13 @@ from app.api.v1 import admin, auth, nodes, shares, storage, trash
 from app.core.config import settings
 from app.core.errors import AppError, app_error_handler
 from app.services.admin_bootstrap import ensure_single_admin
+from app.services.storage_migration import migrate_legacy_storage_layout
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     await ensure_single_admin()
+    await migrate_legacy_storage_layout()
     yield
 
 app = FastAPI(title=settings.app_name, version="1.0.0", lifespan=lifespan)

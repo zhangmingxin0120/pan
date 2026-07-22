@@ -6,14 +6,14 @@
 - 业务范围：认证、个人文件空间、文件操作、回收站和只读分享
 - Python / FastAPI：Python 3.12 / FastAPI 0.115
 - 数据库：PostgreSQL 16，SQLAlchemy 2 异步访问
-- 部署方式：Docker Compose；文件存储与数据库使用持久化卷
+- 部署方式：Docker Compose；文件存储使用项目目录 bind mount，数据库使用持久化卷
 
 ## 2. 简化决策
 
 - 采用按模块拆分结构：`api/v1`、`core`、`models`、`schemas`、`services`。
 - 不引入 Repository、Unit of Work、Redis、Celery、微服务、对象存储和通用响应包装。
 - Bearer JWT 单 Token；修改密码时递增用户令牌版本，使旧令牌立即失效；MVP 不实现 Refresh Token。
-- 真实文件使用 UUID 存储键，业务名称与路径仅保存在数据库。
+- 真实文件使用 `YYYY/MM/DD/{UUID前2位}/{完整UUID}` 存储键（UTC 日期），业务名称与虚拟路径仅保存在数据库。
 
 ## 3. 目录与职责
 
@@ -72,6 +72,7 @@
 - 应用：`http://localhost:8080`
 - API 健康检查：`http://localhost:8000/health`
 - 持久化位置：PostgreSQL 使用 `postgres_data` 数据卷；上传文件绑定到项目目录 `data/files`。
+- 存储分片：每天按 UUID 前两位分为 256 个目录；旧版平铺键在应用启动时执行可恢复迁移。
 - 国内镜像：DaoCloud Docker Hub 代理、npmmirror、清华 pip 镜像。
 - 测试：`pytest`；迁移：`alembic upgrade head`。
 

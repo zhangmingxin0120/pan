@@ -1,10 +1,17 @@
+from pathlib import Path
+import uuid
+
 from httpx import AsyncClient
 
+from app.core.config import settings
 from app.core.security import hash_password
-from app.models import User
+from app.models import Node, User
+from app.services.storage_migration import migrate_legacy_storage_layout
 
 
-async def test_file_lifecycle_and_share(client: AsyncClient, auth_headers: dict[str, str]):
+async def test_file_lifecycle_and_share(
+    client: AsyncClient, auth_headers: dict[str, str], session_factory
+):
     root_response = await client.get("/api/v1/nodes", headers=auth_headers)
     assert root_response.status_code == 200
     root_id = root_response.json()["current_folder"]["id"]
@@ -33,6 +40,13 @@ async def test_file_lifecycle_and_share(client: AsyncClient, auth_headers: dict[
     )
     assert upload_response.status_code == 201
     file_id = upload_response.json()["id"]
+    async with session_factory() as db:
+        stored_node = await db.get(Node, uuid.UUID(file_id))
+        assert stored_node is not None and stored_node.storage_key is not None
+        key_parts = stored_node.storage_key.split("/")
+        assert len(key_parts) == 5
+        assert key_parts[3] == key_parts[4][:2]
+        assert (Path(settings.storage_path).joinpath(*key_parts)).is_file()
 
     list_response = await client.get(
         "/api/v1/nodes", params={"parent_id": folder_id}, headers=auth_headers
@@ -175,3 +189,33 @@ async def test_single_admin_requires_password_change(client: AsyncClient, sessio
     denied = await client.get("/api/v1/admin/overview", headers=regular_headers)
     assert denied.status_code == 403
     assert denied.json()["code"] == "ADMIN_REQUIRED"
+
+
+async def test_legacy_flat_file_migration(
+    client: AsyncClient, auth_headers: dict[str, str], session_factory
+):
+    uploaded = await client.post(
+        "/api/v1/nodes/upload",
+        files={"file": ("legacy.txt", b"legacy data", "text/plain")},
+        headers=auth_headers,
+    )
+    assert uploaded.status_code == 201
+    node_id = uuid.UUID(uploaded.json()["id"])
+
+    async with session_factory() as db:
+        node = await db.get(Node, node_id)
+        assert node is not None and node.storage_key is not None
+        sharded_path = Path(settings.storage_path).joinpath(*node.storage_key.split("/"))
+        object_id = node.storage_key.rsplit("/", 1)[-1]
+        legacy_path = Path(settings.storage_path) / object_id
+        sharded_path.replace(legacy_path)
+        node.storage_key = object_id
+        await db.commit()
+
+    assert await migrate_legacy_storage_layout(session_factory) == 1
+    async with session_factory() as db:
+        node = await db.get(Node, node_id)
+        assert node is not None and node.storage_key is not None
+        assert node.storage_key.count("/") == 4
+        assert not legacy_path.exists()
+        assert Path(settings.storage_path).joinpath(*node.storage_key.split("/")).read_bytes() == b"legacy data"
