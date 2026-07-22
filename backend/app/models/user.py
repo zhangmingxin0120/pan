@@ -10,6 +10,7 @@ from app.core.database import Base
 class User(Base):
     __tablename__ = "users"
     __table_args__ = (
+        Index("ix_users_email", "email"),
         Index("uq_users_email_lower", func.lower(text("email")), unique=True),
         Index("uq_users_username_lower", func.lower(text("username")), unique=True),
         Index(
@@ -22,7 +23,7 @@ class User(Base):
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    email: Mapped[str] = mapped_column(String(320), unique=True, index=True)
+    email: Mapped[str] = mapped_column(String(320), unique=True)
     username: Mapped[str | None] = mapped_column(String(80), nullable=True)
     name: Mapped[str] = mapped_column(String(80))
     password_hash: Mapped[str] = mapped_column(String(255))
@@ -37,3 +38,6 @@ class User(Base):
 
     nodes: Mapped[list["Node"]] = relationship(back_populates="owner", cascade="all, delete-orphan")
     shares: Mapped[list["Share"]] = relationship(back_populates="owner", cascade="all, delete-orphan")
+    api_applications: Mapped[list["ApiApplication"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )

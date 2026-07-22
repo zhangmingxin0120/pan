@@ -291,6 +291,145 @@ async def test_single_admin_requires_password_change(client: AsyncClient, sessio
     assert reset_login.json()["user"]["must_change_password"] is True
 
 
+async def test_external_api_application_scope_permissions_and_usage(
+    client: AsyncClient, auth_headers: dict[str, str], session_factory
+):
+    async with session_factory() as db:
+        db.add(
+            User(
+                email="administrator@pan.internal",
+                username="administrator",
+                name="系统管理员",
+                password_hash=hash_password("admin-password"),
+                quota_bytes=0,
+                is_admin=True,
+                must_change_password=False,
+                is_active=True,
+            )
+        )
+        await db.commit()
+
+    admin_login = await client.post(
+        "/api/v1/admin/login",
+        json={"username": "administrator", "password": "admin-password"},
+    )
+    admin_headers = {"Authorization": f"Bearer {admin_login.json()['access_token']}"}
+    me = await client.get("/api/v1/auth/me", headers=auth_headers)
+    owner_id = me.json()["id"]
+
+    allowed = await client.post(
+        "/api/v1/nodes/folders", json={"name": "API 授权目录"}, headers=auth_headers
+    )
+    outside = await client.post(
+        "/api/v1/nodes/folders", json={"name": "私有目录"}, headers=auth_headers
+    )
+    outside_file = await client.post(
+        "/api/v1/nodes/upload",
+        data={"parent_id": outside.json()["id"]},
+        files={"file": ("private.txt", b"private", "text/plain")},
+        headers=auth_headers,
+    )
+
+    folders = await client.get(
+        f"/api/v1/admin/integrations/users/{owner_id}/folders", headers=admin_headers
+    )
+    assert folders.status_code == 200
+    assert {item["path"] for item in folders.json()} >= {"/", "/API 授权目录", "/私有目录"}
+
+    created = await client.post(
+        "/api/v1/admin/integrations",
+        json={
+            "name": "测试业务系统",
+            "user_id": owner_id,
+            "root_node_id": allowed.json()["id"],
+            "can_read": True,
+            "can_write": True,
+            "can_delete": True,
+        },
+        headers=admin_headers,
+    )
+    assert created.status_code == 201
+    application_id = created.json()["application"]["id"]
+    api_key = created.json()["api_key"]
+    api_headers = {"Authorization": f"Bearer {api_key}"}
+    assert api_key.startswith("pan_")
+
+    scoped_list = await client.get("/api/v1/open/nodes", headers=api_headers)
+    assert scoped_list.status_code == 200
+    assert scoped_list.json()["current_folder"]["id"] == allowed.json()["id"]
+    assert scoped_list.json()["items"] == []
+
+    leaked = await client.get(
+        f"/api/v1/open/nodes/{outside_file.json()['id']}", headers=api_headers
+    )
+    assert leaked.status_code == 404
+
+    uploaded = await client.post(
+        "/api/v1/open/upload",
+        files={"file": ("external.txt", b"external data", "text/plain")},
+        headers=api_headers,
+    )
+    assert uploaded.status_code == 201
+    downloaded = await client.get(
+        f"/api/v1/open/nodes/{uploaded.json()['id']}/download", headers=api_headers
+    )
+    assert downloaded.status_code == 200
+    assert downloaded.content == b"external data"
+    assert (
+        await client.delete(
+            f"/api/v1/open/nodes/{uploaded.json()['id']}", headers=api_headers
+        )
+    ).status_code == 204
+    immutable_root = await client.delete(
+        f"/api/v1/open/nodes/{allowed.json()['id']}", headers=api_headers
+    )
+    assert immutable_root.status_code == 422
+    assert immutable_root.json()["code"] == "API_ROOT_IMMUTABLE"
+
+    applications = await client.get("/api/v1/admin/integrations", headers=admin_headers)
+    usage = applications.json()["items"][0]
+    assert usage["request_count"] >= 6
+    assert usage["failed_request_count"] >= 2
+    assert usage["upload_bytes"] == len(b"external data")
+    assert usage["download_bytes"] == len(b"external data")
+    assert usage["last_used_at"] is not None
+
+    rotated = await client.post(
+        f"/api/v1/admin/integrations/{application_id}/rotate-key", headers=admin_headers
+    )
+    assert rotated.status_code == 200
+    new_headers = {"Authorization": f"Bearer {rotated.json()['api_key']}"}
+    assert (await client.get("/api/v1/open/nodes", headers=api_headers)).status_code == 401
+    assert (await client.get("/api/v1/open/nodes", headers=new_headers)).status_code == 200
+
+    disabled = await client.patch(
+        f"/api/v1/admin/integrations/{application_id}",
+        json={"is_active": False},
+        headers=admin_headers,
+    )
+    assert disabled.status_code == 200
+    assert (await client.get("/api/v1/open/nodes", headers=new_headers)).status_code == 403
+
+    read_only = await client.post(
+        "/api/v1/admin/integrations",
+        json={
+            "name": "只读系统",
+            "user_id": owner_id,
+            "root_node_id": allowed.json()["id"],
+            "can_read": True,
+            "can_write": False,
+            "can_delete": False,
+        },
+        headers=admin_headers,
+    )
+    read_headers = {"Authorization": f"Bearer {read_only.json()['api_key']}"}
+    denied_write = await client.post(
+        "/api/v1/open/folders", json={"name": "禁止创建"}, headers=read_headers
+    )
+    assert denied_write.status_code == 403
+    assert denied_write.json()["code"] == "API_PERMISSION_DENIED"
+
+
 async def test_legacy_flat_file_migration(
     client: AsyncClient, auth_headers: dict[str, str], session_factory
 ):

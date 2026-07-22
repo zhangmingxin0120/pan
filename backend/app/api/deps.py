@@ -1,14 +1,19 @@
+import hmac
 import uuid
+from collections.abc import AsyncIterator
+from dataclasses import dataclass
+from datetime import UTC, datetime
 
 from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.errors import AppError
 from app.core.security import decode_access_token
-from app.models import User
+from app.models import ApiApplication, Node, User
+from app.services.api_keys import api_key_hash, api_key_prefix
 
 bearer = HTTPBearer(auto_error=False)
 
@@ -45,3 +50,62 @@ async def get_admin_user(user: User = Depends(get_current_user)) -> User:
     if not user.is_admin:
         raise AppError(403, "ADMIN_REQUIRED", "需要管理员权限")
     return user
+
+
+@dataclass
+class ApiContext:
+    application: ApiApplication
+    user: User
+    root_node: Node
+    upload_bytes: int = 0
+    download_bytes: int = 0
+
+
+async def get_api_context(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+    db: AsyncSession = Depends(get_db),
+) -> AsyncIterator[ApiContext]:
+    if credentials is None:
+        raise AppError(401, "API_KEY_REQUIRED", "请提供 API Key")
+    raw_key = credentials.credentials
+    prefix = api_key_prefix(raw_key)
+    if not prefix:
+        raise AppError(401, "INVALID_API_KEY", "API Key 无效")
+    application = await db.scalar(
+        select(ApiApplication).where(ApiApplication.key_prefix == prefix)
+    )
+    if not application or not hmac.compare_digest(
+        application.key_hash, api_key_hash(raw_key)
+    ):
+        raise AppError(401, "INVALID_API_KEY", "API Key 无效")
+    user = await db.get(User, application.user_id)
+    root = await db.get(Node, application.root_node_id)
+    if not application.is_active:
+        raise AppError(403, "API_APPLICATION_DISABLED", "API 应用已停用")
+    if not user or not user.is_active:
+        raise AppError(403, "ACCOUNT_DISABLED", "关联账号已停用")
+    if not root or root.trashed_at is not None:
+        raise AppError(403, "API_ROOT_UNAVAILABLE", "授权目录不可用")
+
+    context = ApiContext(application=application, user=user, root_node=root)
+    application_id = application.id
+    failed = False
+    try:
+        yield context
+    except Exception:
+        failed = True
+        await db.rollback()
+        raise
+    finally:
+        await db.execute(
+            update(ApiApplication)
+            .where(ApiApplication.id == application_id)
+            .values(
+                request_count=ApiApplication.request_count + 1,
+                failed_request_count=ApiApplication.failed_request_count + int(failed),
+                upload_bytes=ApiApplication.upload_bytes + context.upload_bytes,
+                download_bytes=ApiApplication.download_bytes + context.download_bytes,
+                last_used_at=datetime.now(UTC),
+            )
+        )
+        await db.commit()

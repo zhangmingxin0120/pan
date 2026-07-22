@@ -39,6 +39,41 @@ export interface AdminSettings {
   registration_enabled: boolean
 }
 
+export interface IntegrationFolder {
+  id: string
+  path: string
+}
+
+export interface ApiApplication {
+  id: string
+  name: string
+  user_id: string
+  user_email: string
+  root_node_id: string
+  root_path: string
+  key_prefix: string
+  can_read: boolean
+  can_write: boolean
+  can_delete: boolean
+  is_active: boolean
+  request_count: number
+  failed_request_count: number
+  upload_bytes: number
+  download_bytes: number
+  last_used_at: string | null
+  created_at: string
+}
+
+export interface ApiApplicationList {
+  items: ApiApplication[]
+  total: number
+}
+
+export interface ApiApplicationSecret {
+  application: ApiApplication
+  api_key: string
+}
+
 export interface AdminUserCreateResult {
   user: AdminUser
   temporary_password: string

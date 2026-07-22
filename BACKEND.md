@@ -12,7 +12,7 @@
 
 - 采用按模块拆分结构：`api/v1`、`core`、`models`、`schemas`、`services`。
 - 不引入 Repository、Unit of Work、Redis、Celery、微服务、对象存储和通用响应包装。
-- Bearer JWT 单 Token；修改密码时递增用户令牌版本，使旧令牌立即失效；MVP 不实现 Refresh Token。
+- 用户使用 Bearer JWT 单 Token；外部系统使用独立高熵 API Key，数据库只保存 HMAC-SHA256 摘要。
 - 真实文件使用 `YYYY/MM/DD/{UUID前2位}/{完整UUID}` 存储键（UTC 日期），业务名称与虚拟路径仅保存在数据库。
 
 ## 3. 目录与职责
@@ -33,6 +33,7 @@
 | users | email、name、password_hash、quota_bytes | email 大小写不敏感唯一 | 拥有 nodes/shares |
 | nodes | owner_id、parent_id、kind、name、size、storage_key、trashed_at | owner/parent/lower(name) 活跃唯一；父级索引 | 自引用目录树 |
 | shares | owner_id、node_id、token、expires_at、revoked_at | token 唯一 | 指向 node |
+| api_applications | user_id、root_node_id、key_prefix、key_hash、权限与累计用量 | key_prefix 唯一 | 指向 user 和授权根目录 |
 
 - 建表方式：Alembic。
 - 事务边界：每个创建、上传、移动、复制、删除、恢复或分享操作独立事务。
@@ -40,17 +41,18 @@
 ## 5. API 约定
 
 - 前缀：`/api/v1`
-- 认证：`Authorization: Bearer <JWT>`
+- 认证：用户接口使用 `Authorization: Bearer <JWT>`；`/open` 使用独立 API Key
 - 分页：`items / total / page / page_size`
 - 错误：`code / message / details`
 - 创建返回 201，删除返回 204；401/403/404/409/422 保持语义。
 
-主要资源：`/auth`、`/nodes`、`/trash`、`/shares`、`/public/shares`、`/storage`。OpenAPI `/docs` 是字段级事实来源。
+主要资源：`/auth`、`/nodes`、`/trash`、`/shares`、`/public/shares`、`/storage`、`/open`。OpenAPI `/api/docs` 是字段级事实来源。
 
 ## 6. 权限与文件
 
 - 所有私有节点查询同时限定 `owner_id` 与当前状态，越权不泄露归属。
 - 分享访问只允许分享节点或文件夹后代，且每次检查到期、撤销和源节点状态。
+- API 应用只允许授权根目录及其后代，并独立检查读取、写入和删除权限；轮换或停用后旧密钥立即失效。
 - 文件名需通过业务校验；同级名称不区分大小写判重。
 - 默认单文件上限 1 GiB、用户总容量 5 GiB。
 - 实际文件保存在 `STORAGE_PATH`；下载文件名使用业务名称，磁盘路径永不使用用户输入。

@@ -14,6 +14,7 @@ import {
   type DataTableColumns,
 } from 'naive-ui'
 import AppIcon from '@/components/base/AppIcon.vue'
+import IntegrationPanel from '@/components/admin/IntegrationPanel.vue'
 import {
   createUser,
   getOverview,
@@ -298,6 +299,8 @@ onMounted(() => void load())
         </div>
         <NDataTable :columns="columns" :data="users" :loading="loading" :row-key="(row: AdminUser) => row.id" :scroll-x="960" />
       </section>
+
+      <IntegrationPanel :users="users" />
     </section>
 
     <NModal v-model:show="quotaDialog.show" preset="dialog" title="调整容量配额" positive-text="保存" negative-text="取消" :loading="quotaDialog.loading" @positive-click="saveQuota">
