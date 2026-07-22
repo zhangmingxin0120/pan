@@ -29,8 +29,8 @@ router = APIRouter(prefix="/nodes", tags=["文件"])
 async def list_nodes(
     parent_id: uuid.UUID | None = None,
     search: str | None = Query(default=None, max_length=100),
-    sort_by: str = Query(default="name", pattern="^(name|size|updated_at)$"),
-    sort_order: str = Query(default="asc", pattern="^(asc|desc)$"),
+    sort_by: str = Query(default="updated_at", pattern="^(name|size|updated_at)$"),
+    sort_order: str = Query(default="desc", pattern="^(asc|desc)$"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=50, ge=1, le=100),
     user: User = Depends(get_current_user),
@@ -200,4 +200,3 @@ async def preview(
     db: AsyncSession = Depends(get_db),
 ):
     return file_response(await node_service.get_owned_node(db, user.id, node_id), inline=True)
-

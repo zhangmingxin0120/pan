@@ -264,3 +264,34 @@ async def test_empty_trash_removes_nested_files(
     assert (await client.delete("/api/v1/trash", headers=auth_headers)).status_code == 204
     assert (await client.get("/api/v1/trash", headers=auth_headers)).json() == []
     assert not stored_path.exists()
+
+
+async def test_default_sort_shows_latest_updated_first(
+    client: AsyncClient, auth_headers: dict[str, str]
+):
+    first = await client.post(
+        "/api/v1/nodes/upload",
+        files={"file": ("first.txt", b"first", "text/plain")},
+        headers=auth_headers,
+    )
+    second = await client.post(
+        "/api/v1/nodes/upload",
+        files={"file": ("second.txt", b"second", "text/plain")},
+        headers=auth_headers,
+    )
+    assert first.status_code == 201 and second.status_code == 201
+
+    initial = await client.get("/api/v1/nodes", headers=auth_headers)
+    assert [item["name"] for item in initial.json()["items"]] == ["second.txt", "first.txt"]
+
+    renamed = await client.patch(
+        f"/api/v1/nodes/{first.json()['id']}/name",
+        json={"name": "first-updated.txt"},
+        headers=auth_headers,
+    )
+    assert renamed.status_code == 200
+    updated = await client.get("/api/v1/nodes", headers=auth_headers)
+    assert [item["name"] for item in updated.json()["items"]] == [
+        "first-updated.txt",
+        "second.txt",
+    ]
