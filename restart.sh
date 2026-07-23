@@ -4,8 +4,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT"
 APP_NAME="Pan"
-APP_URL="http://localhost:8080"
-HEALTH_URL="http://localhost:8080/health"
+APP_URL="http://localhost:8091"
+HEALTH_URL="http://localhost:8091/health"
 FORCE_BUILD=false
 [[ "${1:-}" == "--build" ]] && FORCE_BUILD=true
 

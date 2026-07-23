@@ -68,15 +68,15 @@
 | COOKIE_SECURE | 仅允许 HTTPS 发送会话 Cookie | 生产必填 | HTTPS 部署为 `true` |
 | COOKIE_SAMESITE | Cookie 跨站策略 | 否 | `lax` |
 | STORAGE_PATH | 持久化目录 | 是 | `/data/files` |
-| CORS_ORIGINS | 允许携带 Cookie 的准确前端来源 | 是 | `http://localhost:8080`，禁止 `*` |
+| CORS_ORIGINS | 允许携带 Cookie 的准确前端来源 | 是 | `http://localhost:8091`，禁止 `*` |
 | DEFAULT_QUOTA_BYTES | 默认容量 | 否 | `5368709120` |
 | MAX_FILE_SIZE_BYTES | 单文件上限 | 否 | `1073741824` |
 
 ## 8. Docker 与验证
 
 - Compose：`docker-compose.yml`
-- 应用：`http://localhost:8080`
-- API 健康检查：`http://localhost:8000/health`
+- 应用：`http://localhost:8091`
+- API 健康检查：`http://localhost:8092/health`
 - 持久化位置：PostgreSQL 使用 `postgres_data` 数据卷；上传文件绑定到项目目录 `data/files`。
 - 存储分片：每天按 UUID 前两位分为 256 个目录；旧版平铺键在应用启动时执行可恢复迁移。
 - 国内镜像：DaoCloud Docker Hub 代理、npmmirror、清华 pip 镜像。

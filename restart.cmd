@@ -3,8 +3,8 @@ setlocal EnableExtensions EnableDelayedExpansion
 cd /d "%~dp0"
 
 set "APP_NAME=Pan"
-set "APP_URL=http://localhost:8080"
-set "HEALTH_URL=http://localhost:8080/health"
+set "APP_URL=http://localhost:8091"
+set "HEALTH_URL=http://localhost:8091/health"
 set "FORCE_BUILD=0"
 if /I "%~1"=="--build" set "FORCE_BUILD=1"
 
