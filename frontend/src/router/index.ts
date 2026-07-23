@@ -9,6 +9,8 @@ const router = createRouter({
     { path: '/change-password', name: 'change-password', component: () => import('@/pages/auth/ChangePassword.vue'), meta: { requiresAuth: true } },
     { path: '/admin/login', name: 'admin-login', component: () => import('@/pages/admin/Login.vue'), meta: { adminGuest: true } },
     { path: '/admin', name: 'admin', component: () => import('@/pages/admin/Index.vue'), meta: { requiresAuth: true, admin: true } },
+    { path: '/admin/users', name: 'admin-users', component: () => import('@/pages/admin/Index.vue'), meta: { requiresAuth: true, admin: true } },
+    { path: '/admin/api', name: 'admin-api', component: () => import('@/pages/admin/Index.vue'), meta: { requiresAuth: true, admin: true } },
     { path: '/api-docs', name: 'api-docs', component: () => import('@/pages/api-docs/Index.vue'), meta: { public: true } },
     {
       path: '/',
@@ -43,7 +45,7 @@ router.beforeEach(async (to) => {
     return { name: 'change-password' }
   }
   if (to.name === 'change-password') return
-  if (authStore.user.is_admin && to.name !== 'admin') return { name: 'admin' }
+  if (authStore.user.is_admin && !to.meta.admin) return { name: 'admin' }
   if (!authStore.user.is_admin && (to.meta.admin || to.meta.adminGuest)) return { name: 'files' }
   if (to.meta.guest) return { name: authStore.user.is_admin ? 'admin' : 'files' }
 })

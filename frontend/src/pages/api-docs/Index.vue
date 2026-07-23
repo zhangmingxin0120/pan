@@ -84,7 +84,7 @@ const nodeResponse = `{
 
 const errorResponse = `{
   "code": "API_PERMISSION_DENIED",
-  "message": "API 应用没有 write 权限"
+  "message": "API 应用没有 download 权限"
 }`
 
 const commonErrors: ApiError[] = [
@@ -92,7 +92,7 @@ const commonErrors: ApiError[] = [
   { status: '401', code: 'INVALID_API_KEY', description: 'API Key 无效、格式错误或已经轮换失效' },
   { status: '403', code: 'API_APPLICATION_DISABLED', description: 'API 应用已被管理员停用' },
   { status: '403', code: 'ACCOUNT_DISABLED', description: '绑定账号已被管理员停用' },
-  { status: '403', code: 'API_PERMISSION_DENIED', description: 'API 应用缺少当前操作所需的 read/write/delete 权限' },
+  { status: '403', code: 'API_PERMISSION_DENIED', description: 'API 应用缺少当前操作所需的 read/download/upload/manage/delete 权限' },
 ]
 
 const nodeFields: ApiField[] = [
@@ -373,7 +373,7 @@ onBeforeUnmount(() => {
         <section id="overview" class="hero">
           <span class="eyebrow">PAN OPEN API</span>
           <h1>把 Pan 作为你的文件服务</h1>
-          <p>外部系统可以通过服务端接口，管理某个绑定账号下的文件和文件夹。API Key 由管理员创建，权限可分别控制读取、写入和删除。</p>
+          <p>外部系统可以通过服务端接口，管理某个绑定账号下的文件和文件夹。API Key 由管理员创建，权限可分别控制读取、下载、上传、管理和删除。</p>
           <div class="base-url">
             <span>Base URL</span>
             <code>{{ baseUrl }}</code>
@@ -395,6 +395,14 @@ onBeforeUnmount(() => {
             <div class="table-head"><span>Header</span><span>类型</span><span>必填</span><span>示例</span><span>说明</span></div>
             <div><code>Authorization</code><span>string</span><span>是</span><span>Bearer pan_xxx</span><span>接口调用凭证，由管理员在管理后台创建或轮换</span></div>
           </div>
+          <div class="param-table auth-table">
+            <div class="table-head"><span>权限</span><span>英文名</span><span>控制接口</span><span>说明</span><span>典型用途</span></div>
+            <div><code>读取列表/详情</code><span>read</span><span>GET /findlist、GET /nodes、GET /nodes/{node_id}</span><span>只允许查看目录、文件元数据，不返回文件内容</span><span>文件选择器、资源同步、业务关联</span></div>
+            <div><code>下载文件</code><span>download</span><span>GET /nodes/{node_id}/download</span><span>允许获取文件原始二进制内容</span><span>合同预览、附件下载、文件转存</span></div>
+            <div><code>上传文件</code><span>upload</span><span>POST /upload</span><span>允许新增文件，占用绑定账号容量</span><span>外部表单上传、业务附件归档</span></div>
+            <div><code>管理目录与名称</code><span>manage</span><span>POST /folders、PATCH /nodes/{node_id}/name、POST /nodes/{node_id}/move</span><span>允许创建文件夹、重命名、移动资源</span><span>整理目录、按业务单据归档</span></div>
+            <div><code>删除到回收站</code><span>delete</span><span>DELETE /nodes/{node_id}</span><span>允许把资源移入回收站，不做永久删除</span><span>业务作废、清理临时文件</span></div>
+          </div>
           <CodeBlock title="请求示例" :code="authExample" copy-key="auth" :copied="copied" @copy="copy" />
         </section>
 
@@ -410,7 +418,7 @@ onBeforeUnmount(() => {
         <section id="workflow" class="doc-section">
           <div class="section-title"><span>03</span><div><h2>典型对接流程</h2><p>如果另一个系统要把 Pan 当作文件模块使用，通常按下面顺序接入。</p></div></div>
           <div class="steps">
-            <div><strong>1. 后台创建 API 应用</strong><span>选择绑定账号，并按业务需要开启 read、write、delete 权限。</span></div>
+            <div><strong>1. 后台创建 API 应用</strong><span>选择绑定账号，并按业务需要开启 read、download、upload、manage、delete 权限。</span></div>
             <div><strong>2. 查询资源</strong><span>调用 <code>GET /findlist</code> 或 <code>GET /nodes</code> 找到根目录、目标文件夹和文件 ID。</span></div>
             <div><strong>3. 管理文件</strong><span>用 <code>/folders</code> 创建目录，用 <code>/upload</code> 上传文件，用 <code>/download</code> 下载。</span></div>
             <div><strong>4. 记录业务关联</strong><span>外部系统应保存 Pan 返回的 <code>node_id</code>，后续用它查询、下载、移动或删除。</span></div>

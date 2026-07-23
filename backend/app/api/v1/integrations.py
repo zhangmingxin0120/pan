@@ -28,7 +28,9 @@ router = APIRouter(prefix="/open", tags=["开放 API - 文件管理"])
 def require_permission(context: ApiContext, permission: str) -> None:
     allowed = {
         "read": context.application.can_read,
-        "write": context.application.can_write,
+        "download": context.application.can_download,
+        "upload": context.application.can_upload,
+        "manage": context.application.can_manage,
         "delete": context.application.can_delete,
     }[permission]
     if not allowed:
@@ -156,7 +158,7 @@ async def create_folder(
     context: ApiContext = Depends(get_api_context),
     db: AsyncSession = Depends(get_db),
 ):
-    require_permission(context, "write")
+    require_permission(context, "manage")
     parent = await scoped_folder(db, context, payload.parent_id)
     return await node_service.create_folder(db, context.user, parent.id, payload.name)
 
@@ -168,7 +170,7 @@ async def upload_file(
     context: ApiContext = Depends(get_api_context),
     db: AsyncSession = Depends(get_db),
 ):
-    require_permission(context, "write")
+    require_permission(context, "upload")
     parent = await scoped_folder(db, context, parent_id)
     name = node_service.clean_name(file.filename or "未命名文件")
     await node_service.ensure_name_available(db, context.user.id, parent.id, name)
@@ -208,7 +210,7 @@ async def rename_node(
     context: ApiContext = Depends(get_api_context),
     db: AsyncSession = Depends(get_db),
 ):
-    require_permission(context, "write")
+    require_permission(context, "manage")
     node = await scoped_node(db, context, node_id, allow_root=False)
     return await node_service.rename_node(db, context.user, node, payload.name)
 
@@ -220,7 +222,7 @@ async def move_node(
     context: ApiContext = Depends(get_api_context),
     db: AsyncSession = Depends(get_db),
 ):
-    require_permission(context, "write")
+    require_permission(context, "manage")
     node = await scoped_node(db, context, node_id, allow_root=False)
     target = await scoped_folder(db, context, payload.target_parent_id)
     return await node_service.move_node(db, context.user, node, target.id)
@@ -243,7 +245,7 @@ async def download_file(
     context: ApiContext = Depends(get_api_context),
     db: AsyncSession = Depends(get_db),
 ):
-    require_permission(context, "read")
+    require_permission(context, "download")
     node = await scoped_node(db, context, node_id)
     if node.kind != NodeKind.FILE or not stored_file_exists(node.storage_key):
         raise AppError(404, "FILE_NOT_FOUND", "文件内容不存在")

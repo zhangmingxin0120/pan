@@ -46,7 +46,9 @@ export interface ApiApplication {
   user_email: string
   key_prefix: string
   can_read: boolean
-  can_write: boolean
+  can_download: boolean
+  can_upload: boolean
+  can_manage: boolean
   can_delete: boolean
   is_active: boolean
   request_count: number

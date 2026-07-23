@@ -45,16 +45,28 @@ export const createApiApplication = (payload: {
   name: string
   user_id: string
   can_read: boolean
-  can_write: boolean
+  can_download: boolean
+  can_upload: boolean
+  can_manage: boolean
   can_delete: boolean
 }) =>
   request
     .post<ApiApplicationSecret>('/admin/integrations', payload)
     .then((response) => response.data)
 
-export const updateApiApplication = (id: string, isActive: boolean) =>
+export const updateApiApplication = (
+  id: string,
+  payload: {
+    is_active?: boolean
+    can_read?: boolean
+    can_download?: boolean
+    can_upload?: boolean
+    can_manage?: boolean
+    can_delete?: boolean
+  },
+) =>
   request
-    .patch<ApiApplication>(`/admin/integrations/${id}`, { is_active: isActive })
+    .patch<ApiApplication>(`/admin/integrations/${id}`, payload)
     .then((response) => response.data)
 
 export const rotateApiApplicationKey = (id: string) =>

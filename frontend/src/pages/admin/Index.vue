@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, h, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Database, File, Key, Logout, Search, Users } from '@vicons/tabler'
+import { Api, Database, File, Key, LayoutBoard, Logout, Search, Users } from '@vicons/tabler'
 import {
   NButton,
   NDataTable,
@@ -36,6 +36,12 @@ const users = ref<AdminUser[]>([])
 const search = ref('')
 const loading = ref(true)
 const settingsLoading = ref(false)
+
+const currentSection = computed(() => {
+  if (router.currentRoute.value.name === 'admin-users') return 'users'
+  if (router.currentRoute.value.name === 'admin-api') return 'api'
+  return 'overview'
+})
 
 const quotaDialog = reactive({ show: false, user: null as AdminUser | null, gb: null as number | null, loading: false })
 const createDialog = reactive({ show: false, email: '', name: '', quotaGb: 5, loading: false })
@@ -253,6 +259,11 @@ function logout() {
   void router.replace('/admin/login')
 }
 
+function navigate(section: 'overview' | 'users' | 'api') {
+  const targets = { overview: '/admin', users: '/admin/users', api: '/admin/api' }
+  void router.push(targets[section])
+}
+
 onMounted(() => void load())
 </script>
 
@@ -267,9 +278,18 @@ onMounted(() => void load())
       </div>
     </header>
 
-    <section class="content">
-      <div><h1>系统概览</h1><p>查看网盘运行数据并管理普通用户</p></div>
-      <div class="stats">
+    <div class="admin-layout">
+      <aside class="admin-nav" aria-label="管理菜单">
+        <button :class="{ active: currentSection === 'overview' }" @click="navigate('overview')"><AppIcon :icon="LayoutBoard" />概览</button>
+        <button :class="{ active: currentSection === 'users' }" @click="navigate('users')"><AppIcon :icon="Users" />用户管理</button>
+        <button :class="{ active: currentSection === 'api' }" @click="navigate('api')"><AppIcon :icon="Api" />开放 API</button>
+      </aside>
+
+      <section class="content">
+      <div v-if="currentSection === 'overview'"><h1>系统概览</h1><p>查看网盘运行数据与存储状态</p></div>
+      <div v-else-if="currentSection === 'users'"><h1>用户管理</h1><p>创建内部账号、调整容量和重置用户密码</p></div>
+      <div v-else><h1>开放 API</h1><p>为指定账号创建 API，并精确控制接口权限</p></div>
+      <div v-if="currentSection === 'overview'" class="stats">
         <div class="stat"><AppIcon :icon="Users" /><span><small>用户总数</small><strong>{{ overview?.user_count ?? '—' }}</strong></span></div>
         <div class="stat"><AppIcon :icon="Database" /><span><small>正常用户</small><strong>{{ overview?.active_user_count ?? '—' }}</strong></span></div>
         <div class="stat"><AppIcon :icon="File" /><span><small>文件总数</small><strong>{{ overview?.file_count ?? '—' }}</strong></span></div>
@@ -284,12 +304,12 @@ onMounted(() => void load())
         </div>
       </div>
 
-      <section class="registration-setting">
+      <section v-if="currentSection === 'overview'" class="registration-setting">
         <div><strong>允许公开注册</strong><span>关闭后注册入口隐藏，已有用户、管理员和公开分享不受影响。</span></div>
         <NSwitch :value="settings?.registration_enabled || false" :loading="settingsLoading" @update:value="toggleRegistration" />
       </section>
 
-      <section class="users-panel">
+      <section v-if="currentSection === 'users'" class="users-panel">
         <div class="panel-head">
           <div><h2>用户管理</h2><span>创建内部账号、调整容量或重置密码</span></div>
           <div class="panel-actions">
@@ -300,8 +320,9 @@ onMounted(() => void load())
         <NDataTable :columns="columns" :data="users" :loading="loading" :row-key="(row: AdminUser) => row.id" :scroll-x="960" />
       </section>
 
-      <IntegrationPanel :users="users" />
-    </section>
+      <IntegrationPanel v-if="currentSection === 'api'" :users="users" />
+      </section>
+    </div>
 
     <NModal v-model:show="quotaDialog.show" preset="dialog" title="调整容量配额" positive-text="保存" negative-text="取消" :loading="quotaDialog.loading" @positive-click="saveQuota">
       <div class="form-stack"><span>{{ quotaDialog.user?.name }}（GiB）</span><NInputNumber v-model:value="quotaDialog.gb" :min="0" :precision="1" style="width: 100%" /></div>
@@ -339,13 +360,16 @@ onMounted(() => void load())
 .admin-header { height: 68px; display: flex; align-items: center; justify-content: space-between; padding: 0 32px; border-bottom: 1px solid $border; background: $surface; }
 .brand { display: flex; align-items: center; gap: 10px; }.brand-mark { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 9px; color: white; background: $primary; font-weight: 650; }.brand > span:last-child { display: grid; }.brand small { color: $text-muted; font-size: 10px; }
 .account-actions { display: flex; align-items: center; gap: 8px; color: $text-secondary; font-size: 13px; }
-.content { width: min(1180px, calc(100% - 40px)); margin: 0 auto; padding: 34px 0 60px; }.content h1 { margin: 0; font-size: 27px; }.content > div > p { margin: 6px 0 0; color: $text-secondary; }
+.admin-layout { width: min(1240px, calc(100% - 40px)); display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 28px; margin: 0 auto; padding: 34px 0 60px; }
+.admin-nav { position: sticky; top: 22px; align-self: start; display: grid; gap: 5px; padding: 10px; border: 1px solid $border; border-radius: $radius-lg; background: $surface; }
+.admin-nav button { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 12px; border: 0; border-radius: $radius-md; color: $text-secondary; background: transparent; font: inherit; font-size: 14px; text-align: left; cursor: pointer; transition: .18s ease; }.admin-nav button:hover { color: $primary; background: $primary-soft; }.admin-nav button.active { color: $primary; background: $primary-soft; font-weight: 650; }
+.content { min-width: 0; }.content h1 { margin: 0; font-size: 27px; }.content > div > p { margin: 6px 0 0; color: $text-secondary; }
 .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin: 26px 0 16px; }.stat { display: flex; align-items: center; gap: 14px; padding: 20px; border: 1px solid $border; border-radius: $radius-lg; background: $surface; color: $primary; }.stat > span { display: grid; }.stat small { color: $text-muted; }.stat strong { margin-top: 3px; color: $text; font-size: 23px; }
 .storage-stat { position: relative; }.storage-stat .stat-detail { margin-top: 2px; color: $text-muted; font-size: 10px; white-space: nowrap; }.storage-stat > .n-tag { position: absolute; top: 12px; right: 12px; }
 .registration-setting { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 17px 20px; margin-bottom: 16px; border: 1px solid $border; border-radius: $radius-lg; background: $surface; }.registration-setting > div { display: grid; gap: 3px; }.registration-setting span { color: $text-muted; font-size: 12px; }
 .users-panel { overflow: hidden; border: 1px solid $border; border-radius: $radius-lg; background: $surface; }.panel-head { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 18px 20px; border-bottom: 1px solid $border; }.panel-head h2 { margin: 0; font-size: 17px; }.panel-head span { color: $text-muted; font-size: 12px; }.panel-actions, :deep(.table-actions) { display: flex; align-items: center; gap: 8px; }.panel-actions :deep(.n-input) { width: 260px; }
 :deep(.user-cell) { display: grid; }:deep(.user-cell small) { color: $text-muted; }.form-stack, .credential-box { display: grid; gap: 14px; padding-top: 6px; }.form-stack label, .credential-box label { display: grid; gap: 6px; color: $text-secondary; font-size: 13px; }.credential-box p { margin: 0; padding: 10px 12px; color: $warning; background: #fff7ea; border-radius: $radius-md; }.credential-box small { color: $text-muted; }
 .reset-warning { margin: 0; padding: 10px 12px; color: $warning; background: #fff7ea; border-radius: $radius-md; font-size: 13px; }
-@media (max-width: 800px) { .admin-header { padding: 0 16px; }.account-actions > span { display: none; }.stats { grid-template-columns: repeat(2, 1fr); }.panel-head { align-items: stretch; flex-direction: column; }.panel-actions :deep(.n-input) { width: 100%; }.panel-actions { align-items: stretch; } }
+@media (max-width: 800px) { .admin-header { padding: 0 16px; }.account-actions > span { display: none; }.admin-layout { grid-template-columns: 1fr; gap: 18px; width: min(100% - 32px, 1180px); padding-top: 20px; }.admin-nav { position: static; grid-template-columns: repeat(3, 1fr); }.admin-nav button { justify-content: center; }.stats { grid-template-columns: repeat(2, 1fr); }.panel-head { align-items: stretch; flex-direction: column; }.panel-actions :deep(.n-input) { width: 100%; }.panel-actions { align-items: stretch; } }
 @media (max-width: 480px) { .account-actions .n-button:first-of-type { display: none; }.stats { grid-template-columns: 1fr; }.registration-setting { align-items: flex-start; }.panel-actions { flex-direction: column; } }
 </style>

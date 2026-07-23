@@ -345,7 +345,9 @@ async def test_external_api_application_account_scope_findlist_and_usage(
             "name": "测试业务系统",
             "user_id": owner_id,
             "can_read": True,
-            "can_write": True,
+            "can_download": True,
+            "can_upload": True,
+            "can_manage": True,
             "can_delete": True,
         },
         headers=admin_headers,
@@ -445,7 +447,9 @@ async def test_external_api_application_account_scope_findlist_and_usage(
             "name": "只读系统",
             "user_id": owner_id,
             "can_read": True,
-            "can_write": False,
+            "can_download": False,
+            "can_upload": False,
+            "can_manage": False,
             "can_delete": False,
         },
         headers=admin_headers,
@@ -456,6 +460,34 @@ async def test_external_api_application_account_scope_findlist_and_usage(
     )
     assert denied_write.status_code == 403
     assert denied_write.json()["code"] == "API_PERMISSION_DENIED"
+    denied_download = await client.get(
+        f"/api/v1/open/nodes/{outside_file.json()['id']}/download", headers=read_headers
+    )
+    assert denied_download.status_code == 403
+    assert denied_download.json()["code"] == "API_PERMISSION_DENIED"
+
+    download_only = await client.post(
+        "/api/v1/admin/integrations",
+        json={
+            "name": "只下载系统",
+            "user_id": owner_id,
+            "can_read": False,
+            "can_download": True,
+            "can_upload": False,
+            "can_manage": False,
+            "can_delete": False,
+        },
+        headers=admin_headers,
+    )
+    download_headers = {"Authorization": f"Bearer {download_only.json()['api_key']}"}
+    denied_read = await client.get("/api/v1/open/findlist", headers=download_headers)
+    assert denied_read.status_code == 403
+    assert denied_read.json()["code"] == "API_PERMISSION_DENIED"
+    allowed_download = await client.get(
+        f"/api/v1/open/nodes/{outside_file.json()['id']}/download",
+        headers=download_headers,
+    )
+    assert allowed_download.status_code == 200
 
 
 async def test_legacy_flat_file_migration(

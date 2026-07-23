@@ -30,9 +30,11 @@ async def application_response(
         name=application.name,
         user_id=application.user_id,
         user_email=user.email if user else "账号已删除",
-        key_prefix=f"pan_{application.key_prefix}_…",
+        key_prefix=f"pan_{application.key_prefix}_...",
         can_read=application.can_read,
-        can_write=application.can_write,
+        can_download=application.can_download,
+        can_upload=application.can_upload,
+        can_manage=application.can_manage,
         can_delete=application.can_delete,
         is_active=application.is_active,
         request_count=application.request_count,
@@ -87,7 +89,9 @@ async def create_application(
         key_prefix=prefix,
         key_hash=key_hash,
         can_read=payload.can_read,
-        can_write=payload.can_write,
+        can_download=payload.can_download,
+        can_upload=payload.can_upload,
+        can_manage=payload.can_manage,
         can_delete=payload.can_delete,
     )
     db.add(application)
@@ -106,7 +110,26 @@ async def update_application(
     db: AsyncSession = Depends(get_db),
 ):
     application = await get_application(db, application_id)
-    application.is_active = payload.is_active
+    if payload.is_active is not None:
+        application.is_active = payload.is_active
+    if payload.can_read is not None:
+        application.can_read = payload.can_read
+    if payload.can_download is not None:
+        application.can_download = payload.can_download
+    if payload.can_upload is not None:
+        application.can_upload = payload.can_upload
+    if payload.can_manage is not None:
+        application.can_manage = payload.can_manage
+    if payload.can_delete is not None:
+        application.can_delete = payload.can_delete
+    if not (
+        application.can_read
+        or application.can_download
+        or application.can_upload
+        or application.can_manage
+        or application.can_delete
+    ):
+        raise AppError(422, "INVALID_PERMISSIONS", "至少保留一项接口权限")
     await db.commit()
     await db.refresh(application)
     return await application_response(db, application)

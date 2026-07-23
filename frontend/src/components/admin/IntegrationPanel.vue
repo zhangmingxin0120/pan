@@ -6,6 +6,7 @@ import {
   NInput,
   NModal,
   NSelect,
+  NSpace,
   NSwitch,
   NTag,
   useDialog,
@@ -26,14 +27,26 @@ const dialog = useDialog()
 const applications = ref<ApiApplication[]>([])
 const loading = ref(true)
 
+const defaultPermissions = {
+  canRead: true,
+  canDownload: false,
+  canUpload: false,
+  canManage: false,
+  canDelete: false,
+}
+
 const createDialog = reactive({
   show: false,
   loading: false,
   name: '',
   userId: null as string | null,
-  canRead: true,
-  canWrite: true,
-  canDelete: false,
+  ...defaultPermissions,
+})
+const permissionDialog = reactive({
+  show: false,
+  loading: false,
+  application: null as ApiApplication | null,
+  ...defaultPermissions,
 })
 const secretDialog = reactive({ show: false, title: '', apiKey: '' })
 
@@ -42,6 +55,14 @@ const userOptions = computed(() =>
     .filter((user) => user.is_active)
     .map((user) => ({ label: `${user.name}（${user.email}）`, value: user.id })),
 )
+
+const permissionItems = [
+  { key: 'canRead', label: '读取列表/详情', hint: '允许查询文件夹、文件信息和搜索资源' },
+  { key: 'canDownload', label: '下载文件', hint: '允许获取文件原始内容' },
+  { key: 'canUpload', label: '上传文件', hint: '允许新增文件并占用账号容量' },
+  { key: 'canManage', label: '管理目录与名称', hint: '允许创建文件夹、重命名、移动资源' },
+  { key: 'canDelete', label: '删除到回收站', hint: '允许把文件或文件夹移入回收站' },
+] as const
 
 const formatSize = (bytes: number) => {
   const units = ['B', 'KB', 'MB', 'GB', 'TB']
@@ -64,6 +85,16 @@ const formatDateTime = (value: string | null) =>
 const errorText = (error: unknown) =>
   (error as { userMessage?: string }).userMessage || '操作失败，请重试'
 
+function hasAnyPermission(target: typeof createDialog | typeof permissionDialog) {
+  return (
+    target.canRead ||
+    target.canDownload ||
+    target.canUpload ||
+    target.canManage ||
+    target.canDelete
+  )
+}
+
 async function loadApplications() {
   loading.value = true
   try {
@@ -78,11 +109,10 @@ async function loadApplications() {
 function openCreate() {
   Object.assign(createDialog, {
     show: true,
+    loading: false,
     name: '',
     userId: null,
-    canRead: true,
-    canWrite: true,
-    canDelete: false,
+    ...defaultPermissions,
   })
 }
 
@@ -90,20 +120,26 @@ function selectUser(userId: string | null) {
   createDialog.userId = userId
 }
 
+function permissionPayload(target: typeof createDialog | typeof permissionDialog) {
+  return {
+    can_read: target.canRead,
+    can_download: target.canDownload,
+    can_upload: target.canUpload,
+    can_manage: target.canManage,
+    can_delete: target.canDelete,
+  }
+}
+
 async function submitCreate() {
   if (!createDialog.name.trim()) return message.warning('请输入应用名称'), false
   if (!createDialog.userId) return message.warning('请选择关联账号'), false
-  if (!createDialog.canRead && !createDialog.canWrite && !createDialog.canDelete) {
-    return message.warning('至少选择一项权限'), false
-  }
+  if (!hasAnyPermission(createDialog)) return message.warning('至少选择一项权限'), false
   createDialog.loading = true
   try {
     const result = await createApiApplication({
       name: createDialog.name,
       user_id: createDialog.userId,
-      can_read: createDialog.canRead,
-      can_write: createDialog.canWrite,
-      can_delete: createDialog.canDelete,
+      ...permissionPayload(createDialog),
     })
     createDialog.show = false
     secretDialog.title = 'API 应用已创建'
@@ -118,9 +154,42 @@ async function submitCreate() {
   return false
 }
 
+function openPermissions(application: ApiApplication) {
+  Object.assign(permissionDialog, {
+    show: true,
+    loading: false,
+    application,
+    canRead: application.can_read,
+    canDownload: application.can_download,
+    canUpload: application.can_upload,
+    canManage: application.can_manage,
+    canDelete: application.can_delete,
+  })
+}
+
+async function submitPermissions() {
+  if (!permissionDialog.application) return false
+  if (!hasAnyPermission(permissionDialog)) return message.warning('至少保留一项权限'), false
+  permissionDialog.loading = true
+  try {
+    const updated = await updateApiApplication(
+      permissionDialog.application.id,
+      permissionPayload(permissionDialog),
+    )
+    Object.assign(permissionDialog.application, updated)
+    permissionDialog.show = false
+    message.success('API 权限已更新')
+  } catch (error) {
+    message.error(errorText(error))
+  } finally {
+    permissionDialog.loading = false
+  }
+  return false
+}
+
 async function toggleApplication(application: ApiApplication, active: boolean) {
   try {
-    Object.assign(application, await updateApiApplication(application.id, active))
+    Object.assign(application, await updateApiApplication(application.id, { is_active: active }))
     message.success(active ? 'API 应用已启用' : 'API 应用已停用，密钥立即失效')
   } catch (error) {
     message.error(errorText(error))
@@ -170,7 +239,9 @@ const columns: DataTableColumns<ApiApplication> = [
     render: (row) =>
       h('div', { class: 'permission-tags' }, [
         row.can_read ? h(NTag, { size: 'small' }, { default: () => '读取' }) : null,
-        row.can_write ? h(NTag, { size: 'small' }, { default: () => '写入' }) : null,
+        row.can_download ? h(NTag, { size: 'small', type: 'info' }, { default: () => '下载' }) : null,
+        row.can_upload ? h(NTag, { size: 'small', type: 'success' }, { default: () => '上传' }) : null,
+        row.can_manage ? h(NTag, { size: 'small' }, { default: () => '管理' }) : null,
         row.can_delete ? h(NTag, { size: 'small', type: 'warning' }, { default: () => '删除' }) : null,
       ]),
   },
@@ -197,9 +268,14 @@ const columns: DataTableColumns<ApiApplication> = [
   {
     title: '操作',
     key: 'actions',
-    width: 92,
+    width: 150,
     render: (row) =>
-      h(NButton, { size: 'small', quaternary: true, onClick: () => rotateKey(row) }, { default: () => '轮换密钥' }),
+      h(NSpace, { size: 4 }, {
+        default: () => [
+          h(NButton, { size: 'small', quaternary: true, onClick: () => openPermissions(row) }, { default: () => '权限' }),
+          h(NButton, { size: 'small', quaternary: true, onClick: () => rotateKey(row) }, { default: () => '轮换密钥' }),
+        ],
+      }),
   },
 ]
 
@@ -211,14 +287,14 @@ onMounted(() => void loadApplications())
     <div class="panel-head">
       <div>
         <h2>开放 API</h2>
-        <span>为外部系统绑定一个普通账号，API 可访问该账号的全部网盘资源</span>
+        <span>为外部系统绑定一个普通账号，按用途授予最小接口权限</span>
       </div>
       <div class="panel-actions">
         <NButton tag="a" href="/api-docs" target="_blank">接口文档</NButton>
         <NButton type="primary" @click="openCreate">创建 API 应用</NButton>
       </div>
     </div>
-    <NDataTable :columns="columns" :data="applications" :loading="loading" :row-key="(row: ApiApplication) => row.id" :scroll-x="1180" />
+    <NDataTable :columns="columns" :data="applications" :loading="loading" :row-key="(row: ApiApplication) => row.id" :scroll-x="1260" />
 
     <NModal v-model:show="createDialog.show" preset="dialog" title="创建 API 应用" positive-text="创建应用" negative-text="取消" :loading="createDialog.loading" :mask-closable="false" @positive-click="submitCreate">
       <div class="form-stack">
@@ -226,9 +302,25 @@ onMounted(() => void loadApplications())
         <label><span>关联账号</span><NSelect :value="createDialog.userId" :options="userOptions" filterable placeholder="API 将访问该账号的全部文件" @update:value="selectUser" /></label>
         <div class="permission-list">
           <span>接口权限</span>
-          <label><NSwitch v-model:value="createDialog.canRead" />读取和下载</label>
-          <label><NSwitch v-model:value="createDialog.canWrite" />上传和管理</label>
-          <label><NSwitch v-model:value="createDialog.canDelete" />移入回收站</label>
+          <label v-for="item in permissionItems" :key="item.key">
+            <NSwitch v-model:value="createDialog[item.key]" />
+            <strong>{{ item.label }}</strong>
+            <small>{{ item.hint }}</small>
+          </label>
+        </div>
+      </div>
+    </NModal>
+
+    <NModal v-model:show="permissionDialog.show" preset="dialog" title="调整 API 权限" positive-text="保存权限" negative-text="取消" :loading="permissionDialog.loading" :mask-closable="false" @positive-click="submitPermissions">
+      <div class="form-stack">
+        <p class="permission-note">权限变更会立即影响现有 API Key，不需要重新轮换密钥。</p>
+        <div class="permission-list">
+          <span>接口权限</span>
+          <label v-for="item in permissionItems" :key="item.key">
+            <NSwitch v-model:value="permissionDialog[item.key]" />
+            <strong>{{ item.label }}</strong>
+            <small>{{ item.hint }}</small>
+          </label>
         </div>
       </div>
     </NModal>
@@ -245,10 +337,30 @@ onMounted(() => void loadApplications())
 
 <style scoped lang="scss">
 @use '@/assets/styles/variables' as *;
+
 .integration-panel { overflow: hidden; margin-top: 16px; border: 1px solid $border; border-radius: $radius-lg; background: $surface; }
-.panel-head { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 18px 20px; border-bottom: 1px solid $border; }.panel-head h2 { margin: 0; font-size: 17px; }.panel-head span { color: $text-muted; font-size: 12px; }.panel-actions { display: flex; gap: 8px; }
-:deep(.stack-cell) { display: grid; }:deep(.stack-cell small) { color: $text-muted; }:deep(.permission-tags) { display: flex; flex-wrap: wrap; gap: 4px; }
-.form-stack, .secret-box { display: grid; gap: 14px; padding-top: 6px; }.form-stack > label { display: grid; gap: 6px; color: $text-secondary; font-size: 13px; }.permission-list { display: grid; grid-template-columns: 1fr auto auto auto; align-items: center; gap: 12px; padding-top: 4px; }.permission-list > span { color: $text-secondary; font-size: 13px; }.permission-list label { display: flex; align-items: center; gap: 6px; color: $text-secondary; font-size: 12px; }
-.secret-box p { margin: 0; padding: 10px 12px; color: $warning; background: #fff7ea; border-radius: $radius-md; }.secret-box small { color: $text-muted; }
-@media (max-width: 700px) { .panel-head { align-items: stretch; flex-direction: column; }.panel-actions { justify-content: flex-end; }.permission-list { grid-template-columns: 1fr; }.permission-list > span { margin-bottom: 2px; } }
+.panel-head { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 18px 20px; border-bottom: 1px solid $border; }
+.panel-head h2 { margin: 0; font-size: 17px; }
+.panel-head span { color: $text-muted; font-size: 12px; }
+.panel-actions { display: flex; gap: 8px; }
+:deep(.stack-cell) { display: grid; }
+:deep(.stack-cell small) { color: $text-muted; }
+:deep(.permission-tags) { display: flex; flex-wrap: wrap; gap: 4px; }
+.form-stack, .secret-box { display: grid; gap: 14px; padding-top: 6px; }
+.form-stack > label { display: grid; gap: 6px; color: $text-secondary; font-size: 13px; }
+.permission-list { display: grid; gap: 10px; padding-top: 4px; }
+.permission-list > span { color: $text-secondary; font-size: 13px; }
+.permission-list label { display: grid; grid-template-columns: auto minmax(110px, max-content) 1fr; align-items: center; gap: 8px; color: $text-secondary; font-size: 12px; }
+.permission-list strong { color: $text; font-weight: 600; }
+.permission-list small { color: $text-muted; }
+.permission-note { margin: 0; padding: 10px 12px; border-radius: $radius-md; color: $text-secondary; background: $background; font-size: 12px; }
+.secret-box p { margin: 0; padding: 10px 12px; color: $warning; background: #fff7ea; border-radius: $radius-md; }
+.secret-box small { color: $text-muted; }
+
+@media (max-width: 700px) {
+  .panel-head { align-items: stretch; flex-direction: column; }
+  .panel-actions { justify-content: flex-end; }
+  .permission-list label { grid-template-columns: auto 1fr; }
+  .permission-list small { grid-column: 2; }
+}
 </style>
