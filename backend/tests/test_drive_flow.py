@@ -480,6 +480,7 @@ async def test_external_api_application_account_scope_findlist_and_usage(
         headers=admin_headers,
     )
     download_headers = {"Authorization": f"Bearer {download_only.json()['api_key']}"}
+    download_only_id = download_only.json()["application"]["id"]
     denied_read = await client.get("/api/v1/open/findlist", headers=download_headers)
     assert denied_read.status_code == 403
     assert denied_read.json()["code"] == "API_PERMISSION_DENIED"
@@ -488,6 +489,21 @@ async def test_external_api_application_account_scope_findlist_and_usage(
         headers=download_headers,
     )
     assert allowed_download.status_code == 200
+
+    deleted = await client.delete(
+        f"/api/v1/admin/integrations/{download_only_id}", headers=admin_headers
+    )
+    assert deleted.status_code == 204
+    assert (
+        await client.get(
+            f"/api/v1/open/nodes/{outside_file.json()['id']}/download",
+            headers=download_headers,
+        )
+    ).status_code == 401
+    missing = await client.delete(
+        f"/api/v1/admin/integrations/{download_only_id}", headers=admin_headers
+    )
+    assert missing.status_code == 404
 
 
 async def test_legacy_flat_file_migration(

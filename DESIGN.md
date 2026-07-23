@@ -102,6 +102,8 @@ components:
 
 桌面使用 232px 固定侧栏和流式内容区，内容水平边距 32px；列表工具界面最大宽度 1440px。小于 900px 时侧栏转为抽屉，工具栏允许换行；小于 640px 时隐藏低优先级列并使用紧凑行操作。
 
+管理后台使用 216px 固定侧栏与 56px 顶栏，内容区边距 24px。系统概览采用 `wide` 模式，最大宽度 1440px；用户管理和开放 API 属于数据列表，采用 `fluid` 模式使用全部可用工作区。小于 900px 时侧栏收起为 64px 图标导航，小于 640px 时转为顶部横向导航。后台页标题使用 20px/600，区块标题使用 16px/600。
+
 ## Elevation
 
 页面与侧栏使用背景和 1px 边框分层。仅下拉菜单、Dialog、Drawer 和预览浮层使用中等级阴影。
@@ -135,4 +137,3 @@ components:
 - 全局规则：`frontend/src/assets/styles/global.scss`
 - Naive UI 主题：`frontend/src/theme.ts`
 - 代表页面：`frontend/src/pages/files/Index.vue`
-

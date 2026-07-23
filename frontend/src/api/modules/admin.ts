@@ -73,3 +73,6 @@ export const rotateApiApplicationKey = (id: string) =>
   request
     .post<{ api_key: string }>(`/admin/integrations/${id}/rotate-key`)
     .then((response) => response.data)
+
+export const deleteApiApplication = (id: string) =>
+  request.delete<void>(`/admin/integrations/${id}`)

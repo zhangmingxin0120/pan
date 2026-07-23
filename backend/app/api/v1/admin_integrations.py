@@ -147,3 +147,14 @@ async def rotate_key(
     application.key_hash = key_hash
     await db.commit()
     return ApiKeyRotateResponse(api_key=api_key)
+
+
+@router.delete("/{application_id}", status_code=204)
+async def delete_application(
+    application_id: uuid.UUID,
+    _: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    application = await get_application(db, application_id)
+    await db.delete(application)
+    await db.commit()

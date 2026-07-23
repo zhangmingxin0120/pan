@@ -269,26 +269,31 @@ onMounted(() => void load())
 
 <template>
   <main class="admin-page">
-    <header class="admin-header">
+    <aside class="admin-sidebar">
       <div class="brand"><span class="brand-mark">P</span><span><strong>Pan</strong><small>系统管理</small></span></div>
-      <div class="account-actions">
-        <span>administrator</span>
-        <NButton quaternary @click="router.push('/change-password')"><template #icon><AppIcon :icon="Key" /></template>修改密码</NButton>
-        <NButton quaternary @click="logout"><template #icon><AppIcon :icon="Logout" /></template>退出</NButton>
-      </div>
-    </header>
-
-    <div class="admin-layout">
-      <aside class="admin-nav" aria-label="管理菜单">
+      <nav class="admin-nav" aria-label="管理菜单">
         <button :class="{ active: currentSection === 'overview' }" @click="navigate('overview')"><AppIcon :icon="LayoutBoard" />概览</button>
         <button :class="{ active: currentSection === 'users' }" @click="navigate('users')"><AppIcon :icon="Users" />用户管理</button>
         <button :class="{ active: currentSection === 'api' }" @click="navigate('api')"><AppIcon :icon="Api" />开放 API</button>
-      </aside>
+      </nav>
+      <div class="sidebar-foot">Pan 私人云盘</div>
+    </aside>
 
-      <section class="content">
-      <div v-if="currentSection === 'overview'"><h1>系统概览</h1><p>查看网盘运行数据与存储状态</p></div>
-      <div v-else-if="currentSection === 'users'"><h1>用户管理</h1><p>创建内部账号、调整容量和重置用户密码</p></div>
-      <div v-else><h1>开放 API</h1><p>为指定账号创建 API，并精确控制接口权限</p></div>
+    <div class="admin-workspace">
+      <header class="admin-header">
+        <span class="workspace-label">管理后台</span>
+        <div class="account-actions">
+          <span>administrator</span>
+          <NButton quaternary @click="router.push('/change-password')"><template #icon><AppIcon :icon="Key" /></template>修改密码</NButton>
+          <NButton quaternary @click="logout"><template #icon><AppIcon :icon="Logout" /></template>退出</NButton>
+        </div>
+      </header>
+
+      <div class="admin-layout">
+        <section class="content" :class="currentSection === 'overview' ? 'content--wide' : 'content--fluid'">
+      <div class="page-header" v-if="currentSection === 'overview'"><h1>系统概览</h1><p>查看网盘运行数据与存储状态</p></div>
+      <div class="page-header" v-else-if="currentSection === 'users'"><h1>用户管理</h1><p>创建内部账号、调整容量和重置用户密码</p></div>
+      <div class="page-header" v-else><h1>开放 API</h1><p>为指定账号创建 API，并精确控制接口权限</p></div>
       <div v-if="currentSection === 'overview'" class="stats">
         <div class="stat"><AppIcon :icon="Users" /><span><small>用户总数</small><strong>{{ overview?.user_count ?? '—' }}</strong></span></div>
         <div class="stat"><AppIcon :icon="Database" /><span><small>正常用户</small><strong>{{ overview?.active_user_count ?? '—' }}</strong></span></div>
@@ -311,7 +316,7 @@ onMounted(() => void load())
 
       <section v-if="currentSection === 'users'" class="users-panel">
         <div class="panel-head">
-          <div><h2>用户管理</h2><span>创建内部账号、调整容量或重置密码</span></div>
+          <div><h2>账号列表</h2><span>查看账号状态与存储使用情况</span></div>
           <div class="panel-actions">
             <NInput v-model:value="search" clearable placeholder="搜索姓名或邮箱" @keyup.enter="load"><template #prefix><AppIcon :icon="Search" /></template></NInput>
             <NButton type="primary" @click="openCreateUser">创建账号</NButton>
@@ -321,7 +326,8 @@ onMounted(() => void load())
       </section>
 
       <IntegrationPanel v-if="currentSection === 'api'" :users="users" />
-      </section>
+        </section>
+      </div>
     </div>
 
     <NModal v-model:show="quotaDialog.show" preset="dialog" title="调整容量配额" positive-text="保存" negative-text="取消" :loading="quotaDialog.loading" @positive-click="saveQuota">
@@ -357,19 +363,26 @@ onMounted(() => void load())
 <style scoped lang="scss">
 @use '@/assets/styles/variables' as *;
 .admin-page { min-height: 100vh; background: $background; }
-.admin-header { height: 68px; display: flex; align-items: center; justify-content: space-between; padding: 0 32px; border-bottom: 1px solid $border; background: $surface; }
-.brand { display: flex; align-items: center; gap: 10px; }.brand-mark { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 9px; color: white; background: $primary; font-weight: 650; }.brand > span:last-child { display: grid; }.brand small { color: $text-muted; font-size: 10px; }
-.account-actions { display: flex; align-items: center; gap: 8px; color: $text-secondary; font-size: 13px; }
-.admin-layout { width: min(1240px, calc(100% - 40px)); display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 28px; margin: 0 auto; padding: 34px 0 60px; }
-.admin-nav { position: sticky; top: 22px; align-self: start; display: grid; gap: 5px; padding: 10px; border: 1px solid $border; border-radius: $radius-lg; background: $surface; }
-.admin-nav button { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 12px; border: 0; border-radius: $radius-md; color: $text-secondary; background: transparent; font: inherit; font-size: 14px; text-align: left; cursor: pointer; transition: .18s ease; }.admin-nav button:hover { color: $primary; background: $primary-soft; }.admin-nav button.active { color: $primary; background: $primary-soft; font-weight: 650; }
-.content { min-width: 0; }.content h1 { margin: 0; font-size: 27px; }.content > div > p { margin: 6px 0 0; color: $text-secondary; }
-.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin: 26px 0 16px; }.stat { display: flex; align-items: center; gap: 14px; padding: 20px; border: 1px solid $border; border-radius: $radius-lg; background: $surface; color: $primary; }.stat > span { display: grid; }.stat small { color: $text-muted; }.stat strong { margin-top: 3px; color: $text; font-size: 23px; }
-.storage-stat { position: relative; }.storage-stat .stat-detail { margin-top: 2px; color: $text-muted; font-size: 10px; white-space: nowrap; }.storage-stat > .n-tag { position: absolute; top: 12px; right: 12px; }
-.registration-setting { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 17px 20px; margin-bottom: 16px; border: 1px solid $border; border-radius: $radius-lg; background: $surface; }.registration-setting > div { display: grid; gap: 3px; }.registration-setting span { color: $text-muted; font-size: 12px; }
-.users-panel { overflow: hidden; border: 1px solid $border; border-radius: $radius-lg; background: $surface; }.panel-head { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 18px 20px; border-bottom: 1px solid $border; }.panel-head h2 { margin: 0; font-size: 17px; }.panel-head span { color: $text-muted; font-size: 12px; }.panel-actions, :deep(.table-actions) { display: flex; align-items: center; gap: 8px; }.panel-actions :deep(.n-input) { width: 260px; }
-:deep(.user-cell) { display: grid; }:deep(.user-cell small) { color: $text-muted; }.form-stack, .credential-box { display: grid; gap: 14px; padding-top: 6px; }.form-stack label, .credential-box label { display: grid; gap: 6px; color: $text-secondary; font-size: 13px; }.credential-box p { margin: 0; padding: 10px 12px; color: $warning; background: #fff7ea; border-radius: $radius-md; }.credential-box small { color: $text-muted; }
+.admin-sidebar { position: fixed; z-index: 20; inset: 0 auto 0 0; width: 216px; display: flex; flex-direction: column; border-right: 1px solid $border; background: $surface; }
+.brand { height: 56px; display: flex; align-items: center; gap: 10px; padding: 0 20px; border-bottom: 1px solid $border; }
+.brand-mark { width: 30px; height: 30px; display: grid; place-items: center; flex: 0 0 auto; border-radius: $radius-md; color: white; background: $primary; font-weight: 650; }
+.brand > span:last-child { display: grid; min-width: 0; }.brand strong { line-height: 1.1; }.brand small { margin-top: 2px; color: $text-muted; font-size: 10px; }
+.admin-nav { display: grid; gap: 4px; padding: 18px 12px; }
+.admin-nav button { min-height: 40px; display: flex; align-items: center; gap: 11px; padding: 0 12px; border: 0; border-radius: $radius-md; color: $text-secondary; background: transparent; font: inherit; font-size: 14px; text-align: left; cursor: pointer; transition: color .16s ease, background-color .16s ease; }
+.admin-nav button:hover { color: $text; background: $surface-muted; }.admin-nav button:focus-visible { outline: 2px solid $primary; outline-offset: 2px; }.admin-nav button.active { color: $primary; background: $primary-soft; font-weight: 600; }
+.sidebar-foot { margin-top: auto; padding: 16px 24px; border-top: 1px solid $border; color: $text-muted; font-size: 11px; }
+.admin-workspace { min-height: 100vh; margin-left: 216px; }
+.admin-header { position: sticky; z-index: 15; top: 0; height: 56px; display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 0 24px; border-bottom: 1px solid $border; background: rgba(255, 255, 255, .96); backdrop-filter: blur(10px); }
+.workspace-label { color: $text-secondary; font-size: 13px; font-weight: 500; }.account-actions { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; color: $text-secondary; font-size: 13px; }
+.admin-layout { width: 100%; padding: 24px; }.content { width: 100%; min-width: 0; margin: 0 auto; }.content--wide { max-width: 1440px; }.content--fluid { max-width: none; }
+.page-header { margin-bottom: 18px; }.page-header h1 { margin: 0; color: $text; font-size: 20px; font-weight: 600; line-height: 28px; }.page-header p { margin: 3px 0 0; color: $text-secondary; font-size: 13px; line-height: 20px; }
+.stats { display: grid; grid-template-columns: repeat(3, minmax(160px, 1fr)) minmax(300px, 1.6fr); gap: 12px; margin-bottom: 16px; }.stat { min-width: 0; min-height: 104px; display: flex; align-items: center; gap: 13px; padding: 18px; border: 1px solid $border; border-radius: $radius-md; background: $surface; color: $primary; }.stat > span { display: grid; min-width: 0; }.stat small { color: $text-muted; font-size: 12px; }.stat strong { margin-top: 3px; color: $text; font-size: 22px; font-variant-numeric: tabular-nums; }
+.storage-stat { position: relative; }.storage-stat .stat-detail { margin-top: 4px; overflow: hidden; color: $text-muted; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }.storage-stat > .n-tag { position: absolute; top: 14px; right: 14px; }
+.registration-setting { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 16px 18px; border: 1px solid $border; border-radius: $radius-md; background: $surface; }.registration-setting > div { display: grid; gap: 2px; }.registration-setting strong { font-size: 14px; }.registration-setting span { color: $text-muted; font-size: 12px; }
+.users-panel { overflow: hidden; border: 1px solid $border; border-radius: $radius-md; background: $surface; }.panel-head { min-height: 64px; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 12px 16px; border-bottom: 1px solid $border; }.panel-head h2 { margin: 0; font-size: 16px; }.panel-head span { color: $text-muted; font-size: 12px; }.panel-actions, :deep(.table-actions) { display: flex; align-items: center; gap: 8px; }.panel-actions :deep(.n-input) { width: 260px; }
+:deep(.user-cell) { display: grid; min-width: 0; }:deep(.user-cell small) { overflow: hidden; color: $text-muted; text-overflow: ellipsis; }.form-stack, .credential-box { display: grid; gap: 14px; padding-top: 6px; }.form-stack label, .credential-box label { display: grid; gap: 6px; color: $text-secondary; font-size: 13px; }.credential-box p { margin: 0; padding: 10px 12px; color: $warning; background: #fff7ea; border-radius: $radius-md; }.credential-box small { color: $text-muted; }
 .reset-warning { margin: 0; padding: 10px 12px; color: $warning; background: #fff7ea; border-radius: $radius-md; font-size: 13px; }
-@media (max-width: 800px) { .admin-header { padding: 0 16px; }.account-actions > span { display: none; }.admin-layout { grid-template-columns: 1fr; gap: 18px; width: min(100% - 32px, 1180px); padding-top: 20px; }.admin-nav { position: static; grid-template-columns: repeat(3, 1fr); }.admin-nav button { justify-content: center; }.stats { grid-template-columns: repeat(2, 1fr); }.panel-head { align-items: stretch; flex-direction: column; }.panel-actions :deep(.n-input) { width: 100%; }.panel-actions { align-items: stretch; } }
-@media (max-width: 480px) { .account-actions .n-button:first-of-type { display: none; }.stats { grid-template-columns: 1fr; }.registration-setting { align-items: flex-start; }.panel-actions { flex-direction: column; } }
+@media (max-width: 1180px) { .stats { grid-template-columns: repeat(3, 1fr); }.storage-stat { grid-column: 1 / -1; }.account-actions > span { display: none; } }
+@media (max-width: 900px) { .admin-sidebar { width: 64px; }.brand { justify-content: center; padding: 0; }.brand > span:last-child, .sidebar-foot { display: none; }.admin-nav { padding: 14px 8px; }.admin-nav button { justify-content: center; padding: 0; font-size: 0; }.admin-workspace { margin-left: 64px; }.admin-layout { padding: 16px; }.admin-header { padding: 0 16px; }.stats { grid-template-columns: repeat(2, 1fr); }.storage-stat { grid-column: 1 / -1; }.panel-head { align-items: stretch; flex-direction: column; }.panel-actions :deep(.n-input) { width: 100%; }.panel-actions { align-items: stretch; } }
+@media (max-width: 640px) { .admin-sidebar { position: static; width: 100%; height: auto; border-right: 0; }.brand { display: none; }.admin-nav { display: flex; padding: 6px 8px; border-bottom: 1px solid $border; }.admin-nav button { flex: 1; gap: 6px; padding: 0 8px; font-size: 12px; }.admin-workspace { margin-left: 0; }.admin-header { position: static; }.workspace-label { display: none; }.account-actions { margin-left: auto; }.account-actions .n-button:first-of-type { display: none; }.stats { grid-template-columns: 1fr; }.storage-stat { grid-column: auto; }.registration-setting { align-items: flex-start; }.panel-actions { flex-direction: column; } }
 </style>

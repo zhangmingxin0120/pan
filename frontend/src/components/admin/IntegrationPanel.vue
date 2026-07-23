@@ -3,6 +3,7 @@ import { computed, h, onMounted, reactive, ref } from 'vue'
 import {
   NButton,
   NDataTable,
+  NDropdown,
   NInput,
   NModal,
   NSelect,
@@ -15,6 +16,7 @@ import {
 } from 'naive-ui'
 import {
   createApiApplication,
+  deleteApiApplication,
   getApiApplications,
   rotateApiApplicationKey,
   updateApiApplication,
@@ -216,6 +218,29 @@ function rotateKey(application: ApiApplication) {
   })
 }
 
+function deleteApplication(application: ApiApplication) {
+  dialog.warning({
+    title: `删除 ${application.name}？`,
+    content: '删除后，该应用的 API Key 将立即失效，且无法恢复。绑定账号和账号内文件不会被删除。',
+    positiveText: '确认删除',
+    negativeText: '取消',
+    async onPositiveClick() {
+      try {
+        await deleteApiApplication(application.id)
+        applications.value = applications.value.filter((item) => item.id !== application.id)
+        message.success('API 应用已删除')
+      } catch (error) {
+        message.error(errorText(error))
+      }
+    },
+  })
+}
+
+function handleMoreAction(key: string, application: ApiApplication) {
+  if (key === 'rotate') rotateKey(application)
+  if (key === 'delete') deleteApplication(application)
+}
+
 async function copyApiKey() {
   await navigator.clipboard.writeText(secretDialog.apiKey)
   message.success('API Key 已复制')
@@ -239,10 +264,10 @@ const columns: DataTableColumns<ApiApplication> = [
     render: (row) =>
       h('div', { class: 'permission-tags' }, [
         row.can_read ? h(NTag, { size: 'small' }, { default: () => '读取' }) : null,
-        row.can_download ? h(NTag, { size: 'small', type: 'info' }, { default: () => '下载' }) : null,
-        row.can_upload ? h(NTag, { size: 'small', type: 'success' }, { default: () => '上传' }) : null,
+        row.can_download ? h(NTag, { size: 'small' }, { default: () => '下载' }) : null,
+        row.can_upload ? h(NTag, { size: 'small' }, { default: () => '上传' }) : null,
         row.can_manage ? h(NTag, { size: 'small' }, { default: () => '管理' }) : null,
-        row.can_delete ? h(NTag, { size: 'small', type: 'warning' }, { default: () => '删除' }) : null,
+        row.can_delete ? h(NTag, { size: 'small' }, { default: () => '删除' }) : null,
       ]),
   },
   {
@@ -268,12 +293,24 @@ const columns: DataTableColumns<ApiApplication> = [
   {
     title: '操作',
     key: 'actions',
-    width: 150,
+    width: 140,
     render: (row) =>
       h(NSpace, { size: 4 }, {
         default: () => [
           h(NButton, { size: 'small', quaternary: true, onClick: () => openPermissions(row) }, { default: () => '权限' }),
-          h(NButton, { size: 'small', quaternary: true, onClick: () => rotateKey(row) }, { default: () => '轮换密钥' }),
+          h(
+            NDropdown,
+            {
+              trigger: 'click',
+              options: [
+                { label: '轮换密钥', key: 'rotate' },
+                { type: 'divider', key: 'divider' },
+                { label: '删除应用', key: 'delete' },
+              ],
+              onSelect: (key: string) => handleMoreAction(key, row),
+            },
+            { default: () => h(NButton, { size: 'small', quaternary: true }, { default: () => '更多' }) },
+          ),
         ],
       }),
   },
@@ -286,8 +323,8 @@ onMounted(() => void loadApplications())
   <section class="integration-panel">
     <div class="panel-head">
       <div>
-        <h2>开放 API</h2>
-        <span>为外部系统绑定一个普通账号，按用途授予最小接口权限</span>
+        <h2>API 应用</h2>
+        <span>查看外部系统的授权账号、权限与调用情况</span>
       </div>
       <div class="panel-actions">
         <NButton tag="a" href="/api-docs" target="_blank">接口文档</NButton>
@@ -338,9 +375,9 @@ onMounted(() => void loadApplications())
 <style scoped lang="scss">
 @use '@/assets/styles/variables' as *;
 
-.integration-panel { overflow: hidden; margin-top: 16px; border: 1px solid $border; border-radius: $radius-lg; background: $surface; }
-.panel-head { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 18px 20px; border-bottom: 1px solid $border; }
-.panel-head h2 { margin: 0; font-size: 17px; }
+.integration-panel { overflow: hidden; border: 1px solid $border; border-radius: $radius-md; background: $surface; }
+.panel-head { min-height: 64px; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 12px 16px; border-bottom: 1px solid $border; }
+.panel-head h2 { margin: 0; font-size: 16px; }
 .panel-head span { color: $text-muted; font-size: 12px; }
 .panel-actions { display: flex; gap: 8px; }
 :deep(.stack-cell) { display: grid; }
