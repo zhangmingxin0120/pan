@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { Check, Copy, ExternalLink } from '@vicons/tabler'
 import AppIcon from '@/components/base/AppIcon.vue'
 import CodeBlock from '@/components/docs/CodeBlock.vue'
@@ -24,6 +24,7 @@ type Endpoint = {
 }
 
 const copied = ref('')
+const activeSection = ref('overview')
 
 async function copy(value: string, key: string) {
   await navigator.clipboard.writeText(value)
@@ -31,6 +32,28 @@ async function copy(value: string, key: string) {
   window.setTimeout(() => {
     if (copied.value === key) copied.value = ''
   }, 1600)
+}
+
+function getSectionIds() {
+  return ['overview', 'auth', 'models', 'workflow', 'ai-brief', ...endpoints.map((item) => item.id), 'errors']
+}
+
+function updateActiveSection() {
+  const offset = 96
+  const ids = getSectionIds()
+  let current = ids[0]
+
+  for (const id of ids) {
+    const section = document.getElementById(id)
+    if (!section) continue
+    if (section.getBoundingClientRect().top <= offset) current = id
+  }
+
+  activeSection.value = current
+}
+
+function setActiveSection(id: string) {
+  activeSection.value = id
 }
 
 const baseUrl = 'https://你的域名/api/v1/open'
@@ -294,6 +317,17 @@ const endpoints: Endpoint[] = [
   -H "Authorization: Bearer $PAN_API_KEY"`,
   },
 ]
+
+onMounted(() => {
+  updateActiveSection()
+  window.addEventListener('scroll', updateActiveSection, { passive: true })
+  window.addEventListener('resize', updateActiveSection)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('scroll', updateActiveSection)
+  window.removeEventListener('resize', updateActiveSection)
+})
 </script>
 
 <template>
@@ -314,18 +348,24 @@ const endpoints: Endpoint[] = [
       <aside class="sidebar">
         <nav>
           <strong>开始使用</strong>
-          <a href="#overview">接口概览</a>
-          <a href="#auth">身份认证</a>
-          <a href="#models">数据模型</a>
-          <a href="#workflow">对接流程</a>
-          <a href="#ai-brief">AI 对接摘要</a>
+          <a href="#overview" :class="{ active: activeSection === 'overview' }" @click="setActiveSection('overview')">接口概览</a>
+          <a href="#auth" :class="{ active: activeSection === 'auth' }" @click="setActiveSection('auth')">身份认证</a>
+          <a href="#models" :class="{ active: activeSection === 'models' }" @click="setActiveSection('models')">数据模型</a>
+          <a href="#workflow" :class="{ active: activeSection === 'workflow' }" @click="setActiveSection('workflow')">对接流程</a>
+          <a href="#ai-brief" :class="{ active: activeSection === 'ai-brief' }" @click="setActiveSection('ai-brief')">AI 对接摘要</a>
           <strong>接口列表</strong>
-          <a v-for="endpoint in endpoints" :key="endpoint.id" :href="`#${endpoint.id}`">
+          <a
+            v-for="endpoint in endpoints"
+            :key="endpoint.id"
+            :href="`#${endpoint.id}`"
+            :class="{ active: activeSection === endpoint.id }"
+            @click="setActiveSection(endpoint.id)"
+          >
             <code :class="endpoint.method.toLowerCase()">{{ endpoint.method }}</code>
             {{ endpoint.title }}
           </a>
           <strong>错误处理</strong>
-          <a href="#errors">通用错误</a>
+          <a href="#errors" :class="{ active: activeSection === 'errors' }" @click="setActiveSection('errors')">通用错误</a>
         </nav>
       </aside>
 
@@ -514,6 +554,7 @@ const endpoints: Endpoint[] = [
   }
 
   .sidebar a {
+    position: relative;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -527,6 +568,22 @@ const endpoints: Endpoint[] = [
   .sidebar a:hover {
     color: $primary;
     background: #eef6ff;
+  }
+
+  .sidebar a.active {
+    color: $primary;
+    background: #eaf5ff;
+    font-weight: 650;
+  }
+
+  .sidebar a.active::before {
+    position: absolute;
+    left: 0;
+    width: 3px;
+    height: 18px;
+    border-radius: 999px;
+    background: $primary;
+    content: '';
   }
 
   .sidebar code {
