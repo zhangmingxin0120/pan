@@ -6,6 +6,7 @@ const props = withDefaults(
   defineProps<{ title?: string; code: string; copyKey: string; copied?: string }>(),
   { title: '', copied: '' },
 )
+
 defineEmits<{ copy: [value: string, key: string] }>()
 </script>
 
