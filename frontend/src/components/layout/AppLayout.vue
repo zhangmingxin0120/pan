@@ -55,9 +55,9 @@ const go = (to: string) => {
   void router.push(to)
 }
 
-const logout = () => {
-  authStore.logout()
-  void router.push('/login')
+const logout = async () => {
+  await authStore.logout()
+  await router.push('/login')
 }
 
 function handleAccountAction(key: string | number) {
@@ -67,7 +67,7 @@ function handleAccountAction(key: string | number) {
     confirmPassword.value = ''
     passwordDialog.value = true
   } else if (key === 'logout') {
-    logout()
+    void logout()
   }
 }
 

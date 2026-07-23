@@ -12,6 +12,7 @@ import {
   Refresh,
   Search,
   Upload,
+  X,
 } from '@vicons/tabler'
 import {
   NButton,
@@ -61,7 +62,31 @@ const loadError = ref('')
 const search = ref('')
 const sortBy = ref<'name' | 'size' | 'updated_at'>('updated_at')
 const sortOrder = ref<'asc' | 'desc'>('desc')
-const viewMode = ref<'list' | 'grid'>('list')
+const VIEW_MODE_STORAGE_KEY = 'pan:file-view-mode'
+const readStoredViewMode = (): 'list' | 'grid' => {
+  try {
+    const value = window.localStorage.getItem(VIEW_MODE_STORAGE_KEY)
+    return value === 'grid' || value === 'list' ? value : 'list'
+  } catch {
+    return 'list'
+  }
+}
+const viewMode = ref<'list' | 'grid'>(readStoredViewMode())
+const fileType = ref<'all' | 'folder' | 'image' | 'audio' | 'video' | 'pdf' | 'document' | 'spreadsheet' | 'presentation' | 'archive' | 'executable' | 'code'>('all')
+const fileTypeOptions = [
+  { label: '全部类型', value: 'all' },
+  { label: '文件夹', value: 'folder' },
+  { label: '图片', value: 'image' },
+  { label: '文档', value: 'document' },
+  { label: 'PDF', value: 'pdf' },
+  { label: '表格', value: 'spreadsheet' },
+  { label: '演示文稿', value: 'presentation' },
+  { label: '压缩文件', value: 'archive' },
+  { label: '可执行文件', value: 'executable' },
+  { label: '音频', value: 'audio' },
+  { label: '视频', value: 'video' },
+  { label: '代码', value: 'code' },
+]
 const uploadTasks = ref<UploadTask[]>([])
 const selectedIds = ref<Set<string>>(new Set())
 
@@ -134,6 +159,7 @@ async function loadNodes() {
     data.value = await getNodes({
       parent_id: currentFolderId.value,
       search: search.value || undefined,
+      file_type: fileType.value,
       sort_by: sortBy.value,
       sort_order: sortOrder.value,
       page: currentPage.value,
@@ -412,7 +438,25 @@ function submitSearch() {
   else void loadNodes()
 }
 
+function clearFilters() {
+  const typeWillChange = fileType.value !== 'all'
+  search.value = ''
+  fileType.value = 'all'
+  if (!typeWillChange) submitSearch()
+}
+
 watch([currentFolderId, currentPage, sortBy, sortOrder], () => void loadNodes())
+watch(fileType, () => {
+  if (currentPage.value !== 1) changePage(1)
+  else void loadNodes()
+})
+watch(viewMode, (value) => {
+  try {
+    window.localStorage.setItem(VIEW_MODE_STORAGE_KEY, value)
+  } catch {
+    // 浏览器禁用本地存储时仍可正常切换，仅不保留偏好。
+  }
+})
 onMounted(() => void loadNodes())
 onBeforeUnmount(() => {
   if (previewDialog.url) URL.revokeObjectURL(previewDialog.url)
@@ -449,9 +493,12 @@ void nextTick()
     </div>
 
     <div class="toolbar">
-      <NInput v-model:value="search" clearable placeholder="搜索当前文件夹" class="search-input" @keyup.enter="submitSearch" @clear="submitSearch">
-        <template #prefix><AppIcon :icon="Search" :size="17" /></template>
-      </NInput>
+      <div class="filter-group">
+        <NInput v-model:value="search" clearable placeholder="搜索当前文件夹" class="search-input" @keyup.enter="submitSearch" @clear="submitSearch">
+          <template #prefix><AppIcon :icon="Search" :size="17" /></template>
+        </NInput>
+        <NSelect v-model:value="fileType" class="type-filter" :options="fileTypeOptions" />
+      </div>
       <div class="toolbar-actions">
         <NDropdown
           trigger="click"
@@ -479,7 +526,10 @@ void nextTick()
     </div>
 
     <div v-if="selectedNodes.length" class="batch-bar">
-      <div><strong>已选择 {{ selectedNodes.length }} 项</strong><NButton text size="small" @click="selectedIds = new Set()">取消选择</NButton></div>
+      <div class="batch-summary">
+        <strong>已选择 {{ selectedNodes.length }} 项</strong>
+        <NButton size="small" secondary @click="selectedIds = new Set()"><template #icon><AppIcon :icon="X" :size="15" /></template>取消选择</NButton>
+      </div>
       <div>
         <NButton size="small" @click="openTargets(selectedNodes, 'move')">移动到…</NButton>
         <NButton size="small" @click="openTargets(selectedNodes, 'copy')">复制到…</NButton>
@@ -487,7 +537,7 @@ void nextTick()
       </div>
     </div>
 
-    <div class="panel file-panel">
+    <div class="panel file-panel" :class="{ 'file-panel--grid': viewMode === 'grid' && !loading && !loadError && data?.items.length }">
       <div v-if="loading" class="loading-list">
         <div v-for="index in 6" :key="index" class="skeleton-row">
           <NSkeleton circle size="small" /><NSkeleton text style="width: 32%" /><NSkeleton text style="width: 12%" /><NSkeleton text style="width: 16%" />
@@ -497,7 +547,7 @@ void nextTick()
         <div><AppIcon :icon="Refresh" :size="30" /><h3>文件暂时没有加载出来</h3><p>{{ loadError }}</p><NButton @click="loadNodes">重新加载</NButton></div>
       </div>
       <div v-else-if="!data?.items.length" class="state-view">
-        <div><AppIcon :icon="Upload" :size="32" /><h3>{{ search ? '没有找到匹配内容' : '这个文件夹还是空的' }}</h3><p>{{ search ? '换个关键词，或清空搜索条件。' : '上传文件或新建文件夹，开始整理资料。' }}</p><NButton v-if="!search" type="primary" @click="fileInput?.click()">上传文件</NButton><NButton v-else @click="search = ''; loadNodes()">清空搜索</NButton></div>
+        <div><AppIcon :icon="Upload" :size="32" /><h3>{{ search || fileType !== 'all' ? '没有找到匹配内容' : '这个文件夹还是空的' }}</h3><p>{{ search || fileType !== 'all' ? '换个关键词或文件类型，或者清空筛选条件。' : '上传文件或新建文件夹，开始整理资料。' }}</p><NButton v-if="!search && fileType === 'all'" type="primary" @click="fileInput?.click()">上传文件</NButton><NButton v-else @click="clearFilters">清空筛选</NButton></div>
       </div>
       <template v-else-if="viewMode === 'list'">
         <div class="file-row file-row--head"><NCheckbox :checked="allSelected" :indeterminate="partlySelected" aria-label="选择当前页全部内容" @update:checked="toggleAll" /><span>名称</span><span>大小</span><span>更新时间</span><span></span></div>
@@ -513,8 +563,14 @@ void nextTick()
       </template>
       <div v-else class="file-grid">
         <article v-for="node in data.items" :key="node.id" class="file-card" :class="{ 'file-card--selected': selectedIds.has(node.id) }" @dblclick="preview(node)">
-          <div class="file-card-head"><NCheckbox :checked="selectedIds.has(node.id)" :aria-label="`选择 ${node.name}`" @click.stop @update:checked="(checked) => toggleSelection(node.id, checked)" /><FileTypeIcon :node="node" :size="28" /><NDropdown trigger="click" :options="actionOptions(node)" @select="(key) => handleAction(key, node)"><NButton quaternary circle size="small" aria-label="更多操作"><template #icon><AppIcon :icon="DotsVertical" :size="17" /></template></NButton></NDropdown></div>
-          <button type="button" @click="preview(node)"><strong>{{ node.name }}</strong><small>{{ node.kind === 'folder' ? '文件夹' : `${formatSize(node.size_bytes)} · ${formatDate(node.updated_at)}` }}</small></button>
+          <div class="file-card-controls">
+            <NCheckbox :checked="selectedIds.has(node.id)" :aria-label="`选择 ${node.name}`" @click.stop @update:checked="(checked) => toggleSelection(node.id, checked)" />
+            <NDropdown trigger="click" :options="actionOptions(node)" @select="(key) => handleAction(key, node)"><NButton quaternary circle size="small" aria-label="更多操作"><template #icon><AppIcon :icon="DotsVertical" :size="17" /></template></NButton></NDropdown>
+          </div>
+          <button class="file-card-main" type="button" @click="preview(node)">
+            <span class="file-card-preview"><FileTypeIcon :node="node" :size="50" /></span>
+            <span class="file-card-info"><strong>{{ node.name }}</strong><small>{{ node.kind === 'folder' ? '文件夹' : `${formatSize(node.size_bytes)} · ${formatDate(node.updated_at)}` }}</small></span>
+          </button>
         </article>
       </div>
     </div>
@@ -560,7 +616,7 @@ void nextTick()
 <style scoped lang="scss">
 @use '@/assets/styles/variables' as *;
 
-.primary-actions, .toolbar, .toolbar-actions, .breadcrumbs { display: flex; align-items: center; }
+.primary-actions, .toolbar, .toolbar-actions, .breadcrumbs, .filter-group { display: flex; align-items: center; }
 .primary-actions { gap: 10px; }
 .file-input { display: none; }
 .breadcrumbs { min-height: 32px; gap: 4px; margin-bottom: 14px; color: $text-muted; overflow-x: auto; }
@@ -570,13 +626,16 @@ void nextTick()
 .toolbar { justify-content: space-between; gap: 16px; margin-bottom: 16px; }
 .batch-bar { min-height: 52px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 8px 14px; margin: -4px 0 12px; border: 1px solid #b9d8cf; border-radius: $radius-md; background: $primary-soft; }
 .batch-bar > div { display: flex; align-items: center; gap: 8px; }
+.batch-bar > .batch-summary { gap: 14px; }
 .batch-bar strong { color: $primary; font-size: 13px; }
 .search-input { width: min(360px, 100%); }
+.filter-group { min-width: 0; gap: 8px; flex: 1 1 auto; }.type-filter { width: 150px; flex: 0 0 auto; }
 .toolbar-actions { gap: 6px; flex: 0 0 auto; }
 .view-toggle { display: flex; padding: 3px; background: #e9eeeb; border-radius: 9px; }
 .view-toggle button { width: 32px; height: 30px; display: grid; place-items: center; padding: 0; border: 0; color: $text-muted; background: transparent; border-radius: 6px; cursor: pointer; }
 .view-toggle button.active { color: $text; background: $surface; box-shadow: 0 1px 2px rgba(20, 34, 29, 0.08); }
 .file-panel { overflow: hidden; }
+.file-panel--grid { overflow: visible; border: 0; background: transparent; }
 .file-row { min-width: 680px; display: grid; grid-template-columns: 36px minmax(260px, 1fr) 120px 160px 48px; align-items: center; min-height: 62px; padding: 0 16px; border-top: 1px solid $border; }
 .file-row:not(.file-row--head):hover { background: $surface-muted; }
 .file-row--selected { background: $primary-soft; }
@@ -589,16 +648,20 @@ void nextTick()
 .file-meta { color: $text-secondary; font-size: 13px; font-variant-numeric: tabular-nums; }
 .loading-list { padding: 0 16px; }
 .skeleton-row { height: 62px; display: flex; align-items: center; gap: 22px; border-bottom: 1px solid $border; }
-.file-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; padding: 16px; }
-.file-card { min-width: 0; padding: 14px; border: 1px solid $border; border-radius: $radius-md; background: $surface; }
-.file-card:hover { border-color: #b8c7c1; background: $surface-muted; }
-.file-card--selected { border-color: #8dbdaf; background: $primary-soft; }
-.file-card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
-.file-card-head :deep(.n-dropdown-trigger) { margin-left: auto; }
-.file-card > button { width: 100%; display: grid; gap: 3px; padding: 0; border: 0; background: transparent; color: $text; text-align: left; cursor: pointer; }
+.file-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 16px; }
+.file-card { position: relative; min-width: 0; overflow: hidden; border: 1px solid $border; border-radius: $radius-lg; background: $surface; transition: border-color .16s ease, box-shadow .16s ease, transform .16s ease; }
+.file-card:hover, .file-card:focus-within { border-color: #b8c7c1; box-shadow: 0 7px 22px rgba(25, 42, 36, .08); transform: translateY(-1px); }
+.file-card--selected { border-color: #8dbdaf; box-shadow: 0 0 0 2px rgba(23, 107, 91, .1); }
+.file-card-controls { position: absolute; z-index: 2; top: 9px; right: 9px; left: 11px; display: flex; align-items: center; justify-content: space-between; opacity: 0; transition: opacity .14s ease; }
+.file-card:hover .file-card-controls, .file-card:focus-within .file-card-controls, .file-card--selected .file-card-controls { opacity: 1; }
+.file-card-controls :deep(.n-button) { background: rgba(255, 255, 255, .9); box-shadow: 0 1px 4px rgba(25, 42, 36, .09); }
+.file-card-main { width: 100%; display: grid; padding: 0; border: 0; background: transparent; color: $text; text-align: left; cursor: pointer; }
+.file-card-preview { min-height: 128px; display: grid; place-items: center; background: $surface-muted; }
+.file-card-preview :deep(.file-icon) { width: 70px; height: 70px; }
+.file-card-info { min-width: 0; display: grid; gap: 4px; padding: 13px 14px 14px; border-top: 1px solid #edf1ee; background: $surface; }
 .file-card strong, .file-card small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.file-card strong { font-weight: 520; }
-.file-card small { color: $text-muted; font-size: 11px; }
+.file-card strong { font-size: 14px; font-weight: 520; }
+.file-card small { color: $text-muted; font-size: 11px; font-variant-numeric: tabular-nums; }
 .pagination-row { display: flex; align-items: center; justify-content: flex-end; gap: 16px; margin: 14px 0; color: $text-muted; font-size: 12px; }
 .upload-tray { position: fixed; right: 24px; bottom: 24px; z-index: 20; width: min(360px, calc(100vw - 32px)); padding: 14px; border: 1px solid $border; border-radius: $radius-lg; background: $surface; box-shadow: $shadow-md; }
 .upload-tray-head { display: flex; justify-content: space-between; margin-bottom: 10px; }
@@ -619,7 +682,7 @@ void nextTick()
   .primary-actions { width: 100%; }
   .primary-actions :deep(.n-button) { flex: 1; }
   .toolbar { align-items: stretch; flex-direction: column; }
-  .search-input { width: 100%; }
+  .filter-group { width: 100%; }.search-input { width: 100%; }.type-filter { width: 150px; }
   .toolbar-actions { justify-content: flex-end; }
   .file-panel { overflow-x: auto; }
   .batch-bar { align-items: stretch; flex-direction: column; }
@@ -633,6 +696,12 @@ void nextTick()
   .file-row > :nth-child(3), .file-row > :nth-child(4) { display: none; }
   .file-row--head > :nth-child(2) { display: block; }
   .toolbar-actions :deep(.n-button) { display: none; }
+  .filter-group { align-items: stretch; flex-direction: column; }.type-filter { width: 100%; }
   .upload-tray { right: 16px; bottom: 16px; }
+}
+
+@media (hover: none) {
+  .file-card-controls { opacity: 1; }
+  .file-card:hover { transform: none; }
 }
 </style>

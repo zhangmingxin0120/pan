@@ -254,9 +254,9 @@ const columns = computed<DataTableColumns<AdminUser>>(() => [
   },
 ])
 
-function logout() {
-  authStore.logout()
-  void router.replace('/admin/login')
+async function logout() {
+  await authStore.logout()
+  await router.replace('/admin/login')
 }
 
 function navigate(section: 'overview' | 'users' | 'api') {
@@ -291,41 +291,41 @@ onMounted(() => void load())
 
       <div class="admin-layout">
         <section class="content" :class="currentSection === 'overview' ? 'content--wide' : 'content--fluid'">
-      <div class="page-header" v-if="currentSection === 'overview'"><h1>系统概览</h1><p>查看网盘运行数据与存储状态</p></div>
-      <div class="page-header" v-else-if="currentSection === 'users'"><h1>用户管理</h1><p>创建内部账号、调整容量和重置用户密码</p></div>
-      <div class="page-header" v-else><h1>开放 API</h1><p>为指定账号创建 API，并精确控制接口权限</p></div>
-      <div v-if="currentSection === 'overview'" class="stats">
-        <div class="stat"><AppIcon :icon="Users" /><span><small>用户总数</small><strong>{{ overview?.user_count ?? '—' }}</strong></span></div>
-        <div class="stat"><AppIcon :icon="Database" /><span><small>正常用户</small><strong>{{ overview?.active_user_count ?? '—' }}</strong></span></div>
-        <div class="stat"><AppIcon :icon="File" /><span><small>文件总数</small><strong>{{ overview?.file_count ?? '—' }}</strong></span></div>
-        <div class="stat storage-stat">
-          <AppIcon :icon="Database" />
-          <span>
-            <small>全站文件总量</small>
-            <strong>{{ overview ? formatSize(overview.storage_bytes) : '—' }}</strong>
-            <span v-if="overview" class="stat-detail">磁盘剩余 {{ formatSize(overview.disk_free_bytes) }} / {{ formatSize(overview.disk_total_bytes) }}（{{ diskFreePercent.toFixed(1) }}%）</span>
-          </span>
-          <NTag v-if="overview" :type="diskHealth.type" size="small" round>{{ diskHealth.label }}</NTag>
-        </div>
-      </div>
-
-      <section v-if="currentSection === 'overview'" class="registration-setting">
-        <div><strong>允许公开注册</strong><span>关闭后注册入口隐藏，已有用户、管理员和公开分享不受影响。</span></div>
-        <NSwitch :value="settings?.registration_enabled || false" :loading="settingsLoading" @update:value="toggleRegistration" />
-      </section>
-
-      <section v-if="currentSection === 'users'" class="users-panel">
-        <div class="panel-head">
-          <div><h2>账号列表</h2><span>查看账号状态与存储使用情况</span></div>
-          <div class="panel-actions">
-            <NInput v-model:value="search" clearable placeholder="搜索姓名或邮箱" @keyup.enter="load"><template #prefix><AppIcon :icon="Search" /></template></NInput>
-            <NButton type="primary" @click="openCreateUser">创建账号</NButton>
+          <div v-if="currentSection === 'overview'" class="page-header"><h1>系统概览</h1><p>查看网盘运行数据与存储状态</p></div>
+          <div v-else-if="currentSection === 'users'" class="page-header"><h1>用户管理</h1><p>创建内部账号、调整容量和重置用户密码</p></div>
+          <div v-else class="page-header"><h1>开放 API</h1><p>为指定账号创建 API，并精确控制接口权限</p></div>
+          <div v-if="currentSection === 'overview'" class="stats">
+            <div class="stat"><AppIcon :icon="Users" /><span><small>用户总数</small><strong>{{ overview?.user_count ?? '—' }}</strong></span></div>
+            <div class="stat"><AppIcon :icon="Database" /><span><small>正常用户</small><strong>{{ overview?.active_user_count ?? '—' }}</strong></span></div>
+            <div class="stat"><AppIcon :icon="File" /><span><small>文件总数</small><strong>{{ overview?.file_count ?? '—' }}</strong></span></div>
+            <div class="stat storage-stat">
+              <AppIcon :icon="Database" />
+              <span>
+                <small>全站文件总量</small>
+                <strong>{{ overview ? formatSize(overview.storage_bytes) : '—' }}</strong>
+                <span v-if="overview" class="stat-detail">磁盘剩余 {{ formatSize(overview.disk_free_bytes) }} / {{ formatSize(overview.disk_total_bytes) }}（{{ diskFreePercent.toFixed(1) }}%）</span>
+              </span>
+              <NTag v-if="overview" :type="diskHealth.type" size="small" round>{{ diskHealth.label }}</NTag>
+            </div>
           </div>
-        </div>
-        <NDataTable :columns="columns" :data="users" :loading="loading" :row-key="(row: AdminUser) => row.id" :scroll-x="960" />
-      </section>
 
-      <IntegrationPanel v-if="currentSection === 'api'" :users="users" />
+          <section v-if="currentSection === 'overview'" class="registration-setting">
+            <div><strong>允许公开注册</strong><span>关闭后注册入口隐藏，已有用户、管理员和公开分享不受影响。</span></div>
+            <NSwitch :value="settings?.registration_enabled || false" :loading="settingsLoading" @update:value="toggleRegistration" />
+          </section>
+
+          <section v-if="currentSection === 'users'" class="users-panel">
+            <div class="panel-head">
+              <div><h2>账号列表</h2><span>查看账号状态与存储使用情况</span></div>
+              <div class="panel-actions">
+                <NInput v-model:value="search" clearable placeholder="搜索姓名或邮箱" @keyup.enter="load"><template #prefix><AppIcon :icon="Search" /></template></NInput>
+                <NButton type="primary" @click="openCreateUser">创建账号</NButton>
+              </div>
+            </div>
+            <NDataTable :columns="columns" :data="users" :loading="loading" :row-key="(row: AdminUser) => row.id" :scroll-x="960" />
+          </section>
+
+          <IntegrationPanel v-if="currentSection === 'api'" :users="users" />
         </section>
       </div>
     </div>

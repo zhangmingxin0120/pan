@@ -106,6 +106,23 @@ async def revoke_share(
     await db.commit()
 
 
+@router.delete("/{share_id}/record", status_code=204)
+async def delete_share_record(
+    share_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    share = await db.scalar(select(Share).where(Share.id == share_id, Share.owner_id == user.id))
+    if not share:
+        raise AppError(404, "SHARE_NOT_FOUND", "分享不存在")
+    node = await db.get(Node, share.node_id)
+    is_expired = share.expires_at is not None and share.expires_at <= utc_now_for(share.expires_at)
+    if share.revoked_at is None and not is_expired and node and node.trashed_at is None:
+        raise AppError(409, "SHARE_STILL_ACTIVE", "请先取消分享，再删除记录")
+    await db.delete(share)
+    await db.commit()
+
+
 async def get_active_share(db: AsyncSession, token: str) -> tuple[Share, Node, User]:
     row = (
         await db.execute(

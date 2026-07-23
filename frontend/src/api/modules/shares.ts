@@ -11,6 +11,8 @@ export const getShares = () =>
 
 export const revokeShare = (shareId: string) => request.delete(`/shares/${shareId}`)
 
+export const deleteShareRecord = (shareId: string) => request.delete(`/shares/${shareId}/record`)
+
 export const getPublicShare = (token: string, parentId?: string) =>
   request
     .get<PublicShare>(`/public/shares/${token}`, { params: { parent_id: parentId } })

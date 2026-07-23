@@ -22,5 +22,7 @@ export const changePassword = (currentPassword: string, newPassword: string) =>
     })
     .then((response) => response.data)
 
+export const logout = () => request.post<void>('/auth/logout')
+
 export const getPublicSystemConfig = () =>
   request.get<PublicSystemConfig>('/system/config').then((response) => response.data)

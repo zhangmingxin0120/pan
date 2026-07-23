@@ -1,28 +1,44 @@
 import axios from 'axios'
 import type { ApiError } from '@/types'
 
-const TOKEN_KEY = 'pan_access_token'
+const CSRF_COOKIE_NAME = 'pan_csrf'
+const SAFE_METHODS = new Set(['get', 'head', 'options'])
 
-export const getToken = () => sessionStorage.getItem(TOKEN_KEY)
-export const setToken = (token: string) => sessionStorage.setItem(TOKEN_KEY, token)
-export const clearToken = () => sessionStorage.removeItem(TOKEN_KEY)
+try {
+  window.sessionStorage.removeItem('pan_access_token')
+  window.localStorage.removeItem('pan_access_token')
+} catch {
+  // 旧版浏览器 Token 仅做迁移清理，不影响 Cookie 会话。
+}
+
+const getCookie = (name: string) => {
+  const prefix = `${encodeURIComponent(name)}=`
+  const item = document.cookie.split('; ').find((value) => value.startsWith(prefix))
+  return item ? decodeURIComponent(item.slice(prefix.length)) : null
+}
 
 const request = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '/api/v1',
   timeout: 30_000,
+  withCredentials: true,
 })
 
 request.interceptors.request.use((config) => {
-  const token = getToken()
-  if (token) config.headers.Authorization = `Bearer ${token}`
+  const method = config.method?.toLowerCase() || 'get'
+  if (!SAFE_METHODS.has(method)) {
+    const csrfToken = getCookie(CSRF_COOKIE_NAME)
+    if (csrfToken) config.headers['X-CSRF-Token'] = csrfToken
+  }
   return config
 })
 
 request.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401 && getToken()) {
-      clearToken()
+    const requestUrl = String(error.config?.url || '')
+    const isLoginRequest = requestUrl.endsWith('/auth/login') || requestUrl.endsWith('/admin/login')
+    if (error.response?.status === 401 && getCookie(CSRF_COOKIE_NAME) && !isLoginRequest) {
+      document.cookie = `${CSRF_COOKIE_NAME}=; Max-Age=0; Path=/; SameSite=Lax`
       window.dispatchEvent(new Event('pan:auth-expired'))
     }
     const apiError = error.response?.data as ApiError | undefined
@@ -32,4 +48,3 @@ request.interceptors.response.use(
 )
 
 export default request
-

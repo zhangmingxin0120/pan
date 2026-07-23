@@ -1,5 +1,4 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { getToken } from '@/api/request'
 import { useAuthStore } from '@/stores/auth.store'
 
 const router = createRouter({
@@ -29,18 +28,16 @@ const router = createRouter({
 })
 
 router.beforeEach(async (to) => {
-  const hasToken = Boolean(getToken())
-  if (to.matched.some((record) => record.meta.requiresAuth) && !hasToken) {
+  if (to.meta.public || to.name === 'public-share') return
+  const authStore = useAuthStore()
+  await authStore.initialize()
+  if (to.matched.some((record) => record.meta.requiresAuth) && !authStore.user) {
     return to.meta.admin
       ? { name: 'admin-login' }
       : { name: 'login', query: { redirect: to.fullPath } }
   }
-  if (to.meta.adminGuest && !hasToken) return
-  if (!hasToken) return
-  const authStore = useAuthStore()
-  await authStore.initialize()
-  if (!authStore.user) return { name: 'login' }
-  if (to.meta.public) return
+  if (to.meta.adminGuest && !authStore.user) return
+  if (!authStore.user) return
   if (authStore.user.must_change_password && to.name !== 'change-password') {
     return { name: 'change-password' }
   }

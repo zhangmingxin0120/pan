@@ -4,6 +4,7 @@ import type { DriveNode, NodeListResponse, StorageUsage } from '@/types'
 export interface NodeQuery {
   parent_id?: string
   search?: string
+  file_type?: 'all' | 'folder' | 'image' | 'audio' | 'video' | 'pdf' | 'document' | 'spreadsheet' | 'presentation' | 'archive' | 'executable' | 'code'
   sort_by?: 'name' | 'size' | 'updated_at'
   sort_order?: 'asc' | 'desc'
   page?: number

@@ -2,7 +2,7 @@ import secrets
 import shutil
 import uuid
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,9 +10,10 @@ from app.api.deps import get_admin_user
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.errors import AppError
-from app.core.security import create_access_token, hash_password, verify_password
+from app.core.security import hash_password, verify_password
+from app.core.session import issue_session
 from app.models import Node, NodeKind, User
-from app.schemas.auth import AdminLoginRequest, TokenResponse
+from app.schemas.auth import AdminLoginRequest, SessionResponse
 from app.schemas.admin import (
     AdminPasswordResetRequest,
     AdminPasswordResetResponse,
@@ -47,8 +48,12 @@ def user_response(user: User, used_bytes: int = 0) -> AdminUserResponse:
     )
 
 
-@router.post("/login", response_model=TokenResponse)
-async def admin_login(payload: AdminLoginRequest, db: AsyncSession = Depends(get_db)):
+@router.post("/login", response_model=SessionResponse)
+async def admin_login(
+    payload: AdminLoginRequest,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+):
     username = payload.username.strip().lower()
     user = await db.scalar(
         select(User).where(func.lower(User.username) == username, User.is_admin.is_(True))
@@ -57,9 +62,8 @@ async def admin_login(payload: AdminLoginRequest, db: AsyncSession = Depends(get
         raise AppError(401, "INVALID_ADMIN_CREDENTIALS", "管理员账号或密码不正确")
     if not user.is_active:
         raise AppError(403, "ACCOUNT_DISABLED", "管理员账号已停用")
-    return TokenResponse(
-        access_token=create_access_token(str(user.id), user.token_version), user=user
-    )
+    issue_session(response, str(user.id), user.token_version)
+    return SessionResponse(user=user)
 
 
 @router.get("/overview", response_model=AdminOverviewResponse)

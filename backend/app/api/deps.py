@@ -3,31 +3,68 @@ import uuid
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from urllib.parse import urlsplit
 
-from fastapi import Depends
+from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.errors import AppError
-from app.core.security import decode_access_token
+from app.core.config import settings
+from app.core.security import decode_access_token, verify_csrf_token
 from app.models import ApiApplication, User
 from app.services.api_keys import api_key_hash, api_key_prefix
 
 bearer = HTTPBearer(auto_error=False)
+SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
+
+
+def validate_cookie_csrf(
+    request: Request, subject: str, token_version: int
+) -> None:
+    if request.method.upper() in SAFE_METHODS:
+        return
+    origin = request.headers.get("origin")
+    if origin:
+        origin_host = urlsplit(origin).netloc.lower()
+        request_host = request.headers.get("x-forwarded-host", request.headers.get("host", "")).lower()
+        trusted_origins = {item.rstrip("/") for item in settings.cors_origin_list}
+        if not origin_host or (
+            origin_host != request_host and origin.rstrip("/") not in trusted_origins
+        ):
+            raise AppError(403, "CSRF_ORIGIN_MISMATCH", "请求来源校验失败，请刷新页面后重试")
+    cookie_token = request.cookies.get(settings.csrf_cookie_name, "")
+    header_token = request.headers.get("x-csrf-token", "")
+    if (
+        not cookie_token
+        or not header_token
+        or not hmac.compare_digest(cookie_token, header_token)
+        or not verify_csrf_token(cookie_token, subject, token_version)
+    ):
+        raise AppError(403, "CSRF_TOKEN_INVALID", "安全校验失败，请刷新页面后重试")
 
 
 async def get_authenticated_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
     db: AsyncSession = Depends(get_db),
 ) -> User:
-    if credentials is None:
+    using_cookie = credentials is None
+    token = (
+        credentials.credentials
+        if credentials is not None
+        else request.cookies.get(settings.session_cookie_name)
+    )
+    if not token:
         raise AppError(401, "NOT_AUTHENTICATED", "请先登录")
-    token_data = decode_access_token(credentials.credentials)
+    token_data = decode_access_token(token)
     if not token_data:
         raise AppError(401, "INVALID_TOKEN", "登录状态已失效，请重新登录")
     subject, token_version = token_data
+    if using_cookie:
+        validate_cookie_csrf(request, subject, token_version)
     try:
         user_id = uuid.UUID(subject)
     except ValueError as exc:

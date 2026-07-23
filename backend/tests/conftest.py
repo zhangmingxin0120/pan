@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.config import settings
 from app.core.database import Base, get_db
+from app.core.security import create_access_token
 from app.main import app
 
 
@@ -45,5 +46,5 @@ async def auth_headers(client: AsyncClient):
         json={"email": "owner@example.com", "name": "Owner", "password": "password123"},
     )
     assert response.status_code == 201
-    token = response.json()["access_token"]
+    token = create_access_token(response.json()["user"]["id"])
     return {"Authorization": f"Bearer {token}"}

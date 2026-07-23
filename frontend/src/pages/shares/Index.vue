@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { Copy, ExternalLink, Link, Refresh, Trash } from '@vicons/tabler'
+import { Copy, ExternalLink, Link, Refresh, Trash, Unlink } from '@vicons/tabler'
 import { NButton, NSkeleton, NTag, useDialog, useMessage } from 'naive-ui'
 import AppIcon from '@/components/base/AppIcon.vue'
 import FileTypeIcon from '@/components/base/FileTypeIcon.vue'
-import { getShares, revokeShare } from '@/api/modules/shares'
+import { deleteShareRecord, getShares, revokeShare } from '@/api/modules/shares'
 import type { Share } from '@/types'
 
 const message = useMessage()
@@ -58,6 +58,24 @@ function revoke(share: Share) {
   })
 }
 
+function removeRecord(share: Share) {
+  dialog.warning({
+    title: '删除分享记录？',
+    content: `将永久删除“${share.node.name}”的这条分享记录，但不会删除网盘中的原文件。`,
+    positiveText: '删除记录',
+    negativeText: '取消',
+    async onPositiveClick() {
+      try {
+        await deleteShareRecord(share.id)
+        shares.value = shares.value.filter((item) => item.id !== share.id)
+        message.success('分享记录已删除')
+      } catch (value) {
+        message.error(errorText(value))
+      }
+    },
+  })
+}
+
 onMounted(() => void load())
 </script>
 
@@ -79,7 +97,8 @@ onMounted(() => void load())
           <div class="row-actions">
             <NButton v-if="share.is_active" quaternary circle aria-label="复制分享链接" @click="copyLink(share)"><template #icon><AppIcon :icon="Copy" /></template></NButton>
             <a v-if="share.is_active" :href="linkFor(share)" target="_blank" rel="noopener"><NButton quaternary circle aria-label="打开分享链接"><template #icon><AppIcon :icon="ExternalLink" /></template></NButton></a>
-            <NButton v-if="share.is_active" quaternary circle aria-label="取消分享" @click="revoke(share)"><template #icon><AppIcon :icon="Trash" /></template></NButton>
+            <NButton v-if="share.is_active" quaternary circle aria-label="取消分享" title="取消分享" @click="revoke(share)"><template #icon><AppIcon :icon="Unlink" /></template></NButton>
+            <NButton v-else quaternary circle aria-label="删除分享记录" title="删除分享记录" @click="removeRecord(share)"><template #icon><AppIcon :icon="Trash" /></template></NButton>
           </div>
         </div>
       </template>

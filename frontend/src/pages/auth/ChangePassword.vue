@@ -31,10 +31,10 @@ async function submit() {
   }
 }
 
-function logout() {
+async function logout() {
   const wasAdmin = authStore.user?.is_admin
-  authStore.logout()
-  void router.replace(wasAdmin ? '/admin/login' : '/login')
+  await authStore.logout()
+  await router.replace(wasAdmin ? '/admin/login' : '/login')
 }
 </script>
 

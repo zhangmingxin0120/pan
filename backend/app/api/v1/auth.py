@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -6,13 +6,14 @@ from app.api.deps import get_authenticated_user
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.errors import AppError
-from app.core.security import create_access_token, hash_password, verify_password
+from app.core.security import hash_password, verify_password
+from app.core.session import clear_session, issue_session
 from app.models import Node, NodeKind, User
 from app.schemas.auth import (
     ChangePasswordRequest,
     LoginRequest,
     RegisterRequest,
-    TokenResponse,
+    SessionResponse,
     UserResponse,
 )
 from app.services.system_settings import get_system_settings
@@ -20,8 +21,12 @@ from app.services.system_settings import get_system_settings
 router = APIRouter(prefix="/auth", tags=["认证"])
 
 
-@router.post("/register", response_model=TokenResponse, status_code=201)
-async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db)):
+@router.post("/register", response_model=SessionResponse, status_code=201)
+async def register(
+    payload: RegisterRequest,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+):
     system_settings = await get_system_settings(db)
     if not system_settings.registration_enabled:
         raise AppError(403, "REGISTRATION_DISABLED", "系统暂未开放新用户注册")
@@ -50,21 +55,25 @@ async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db))
     )
     await db.commit()
     await db.refresh(user)
-    return TokenResponse(
-        access_token=create_access_token(str(user.id), user.token_version), user=user
-    )
+    issue_session(response, str(user.id), user.token_version)
+    return SessionResponse(user=user)
 
 
-@router.post("/login", response_model=TokenResponse)
-async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
+@router.post("/login", response_model=SessionResponse)
+async def login(
+    payload: LoginRequest,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+):
     user = await db.scalar(
         select(User).where(func.lower(User.email) == payload.email.lower(), User.is_admin.is_(False))
     )
     if not user or not verify_password(payload.password, user.password_hash):
         raise AppError(401, "INVALID_CREDENTIALS", "邮箱或密码不正确")
-    return TokenResponse(
-        access_token=create_access_token(str(user.id), user.token_version), user=user
-    )
+    if not user.is_active:
+        raise AppError(403, "ACCOUNT_DISABLED", "账号已被管理员停用")
+    issue_session(response, str(user.id), user.token_version)
+    return SessionResponse(user=user)
 
 
 @router.get("/me", response_model=UserResponse)
@@ -72,9 +81,10 @@ async def me(user: User = Depends(get_authenticated_user)):
     return user
 
 
-@router.post("/change-password", response_model=TokenResponse)
+@router.post("/change-password", response_model=SessionResponse)
 async def change_password(
     payload: ChangePasswordRequest,
+    response: Response,
     user: User = Depends(get_authenticated_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -87,6 +97,10 @@ async def change_password(
     user.must_change_password = False
     await db.commit()
     await db.refresh(user)
-    return TokenResponse(
-        access_token=create_access_token(str(user.id), user.token_version), user=user
-    )
+    issue_session(response, str(user.id), user.token_version)
+    return SessionResponse(user=user)
+
+
+@router.post("/logout", status_code=204)
+async def logout(response: Response):
+    clear_session(response)

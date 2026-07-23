@@ -4,9 +4,58 @@ import uuid
 from httpx import AsyncClient
 
 from app.core.config import settings
-from app.core.security import hash_password
+from app.core.security import create_access_token, hash_password
 from app.models import Node, User
 from app.services.storage_migration import migrate_legacy_storage_layout
+
+
+def auth_header(response, token_version: int = 0) -> dict[str, str]:
+    token = create_access_token(response.json()["user"]["id"], token_version)
+    return {"Authorization": f"Bearer {token}"}
+
+
+async def test_http_only_cookie_session_and_csrf(client: AsyncClient):
+    registered = await client.post(
+        "/api/v1/auth/register",
+        json={"email": "cookie@example.com", "name": "Cookie", "password": "password123"},
+    )
+    assert registered.status_code == 201
+    assert "access_token" not in registered.json()
+    cookie_headers = registered.headers.get_list("set-cookie")
+    session_header = next(
+        value for value in cookie_headers if value.startswith(f"{settings.session_cookie_name}=")
+    )
+    csrf_header = next(
+        value for value in cookie_headers if value.startswith(f"{settings.csrf_cookie_name}=")
+    )
+    assert "HttpOnly" in session_header
+    assert "SameSite=lax" in session_header
+    assert "HttpOnly" not in csrf_header
+
+    assert (await client.get("/api/v1/auth/me")).status_code == 200
+    missing_csrf = await client.post(
+        "/api/v1/nodes/folders", json={"name": "不应创建"}
+    )
+    assert missing_csrf.status_code == 403
+    assert missing_csrf.json()["code"] == "CSRF_TOKEN_INVALID"
+
+    csrf_token = client.cookies.get(settings.csrf_cookie_name)
+    cross_origin = await client.post(
+        "/api/v1/nodes/folders",
+        json={"name": "跨站请求"},
+        headers={"X-CSRF-Token": csrf_token, "Origin": "https://evil.example"},
+    )
+    assert cross_origin.status_code == 403
+    assert cross_origin.json()["code"] == "CSRF_ORIGIN_MISMATCH"
+    created = await client.post(
+        "/api/v1/nodes/folders",
+        json={"name": "安全请求"},
+        headers={"X-CSRF-Token": csrf_token},
+    )
+    assert created.status_code == 201
+
+    assert (await client.post("/api/v1/auth/logout")).status_code == 204
+    assert (await client.get("/api/v1/auth/me")).status_code == 401
 
 
 async def test_file_lifecycle_and_share(
@@ -57,6 +106,31 @@ async def test_file_lifecycle_and_share(
     )
     assert [item["name"] for item in list_response.json()["items"]] == ["readme.txt"]
 
+    await client.post(
+        "/api/v1/nodes/upload",
+        data={"parent_id": folder_id},
+        files={"file": ("backup.zip", b"zip", "application/zip")},
+        headers=auth_headers,
+    )
+    await client.post(
+        "/api/v1/nodes/upload",
+        data={"parent_id": folder_id},
+        files={"file": ("installer.exe", b"exe", "application/octet-stream")},
+        headers=auth_headers,
+    )
+    archive_list = await client.get(
+        "/api/v1/nodes",
+        params={"parent_id": folder_id, "file_type": "archive"},
+        headers=auth_headers,
+    )
+    assert [item["name"] for item in archive_list.json()["items"]] == ["backup.zip"]
+    executable_list = await client.get(
+        "/api/v1/nodes",
+        params={"parent_id": folder_id, "file_type": "executable"},
+        headers=auth_headers,
+    )
+    assert [item["name"] for item in executable_list.json()["items"]] == ["installer.exe"]
+
     preview_response = await client.get(
         f"/api/v1/nodes/{file_id}/preview", headers=auth_headers
     )
@@ -99,6 +173,29 @@ async def test_file_lifecycle_and_share(
     assert restore_response.status_code == 200
     assert restore_response.json()["parent_id"] == folder_id
 
+    removable_share = await client.post(
+        "/api/v1/shares",
+        json={"node_id": file_id, "expires_in_days": 7},
+        headers=auth_headers,
+    )
+    removable_share_id = removable_share.json()["id"]
+    removable_token = removable_share.json()["token"]
+    active_delete = await client.delete(
+        f"/api/v1/shares/{removable_share_id}/record", headers=auth_headers
+    )
+    assert active_delete.status_code == 409
+    assert (
+        await client.delete(f"/api/v1/shares/{removable_share_id}", headers=auth_headers)
+    ).status_code == 204
+    assert (await client.get(f"/api/v1/public/shares/{removable_token}")).status_code == 410
+    assert (
+        await client.delete(
+            f"/api/v1/shares/{removable_share_id}/record", headers=auth_headers
+        )
+    ).status_code == 204
+    assert (await client.get(f"/api/v1/public/shares/{removable_token}")).status_code == 404
+    assert (await client.get(f"/api/v1/nodes/{file_id}/preview", headers=auth_headers)).status_code == 200
+
 
 async def test_private_nodes_do_not_leak_between_users(
     client: AsyncClient, auth_headers: dict[str, str]
@@ -114,7 +211,7 @@ async def test_private_nodes_do_not_leak_between_users(
         "/api/v1/auth/register",
         json={"email": "other@example.com", "name": "Other", "password": "password123"},
     )
-    other_headers = {"Authorization": f"Bearer {other.json()['access_token']}"}
+    other_headers = auth_header(other)
     response = await client.patch(
         f"/api/v1/nodes/{folder_id}/name", json={"name": "越权"}, headers=other_headers
     )
@@ -139,7 +236,7 @@ async def test_change_password_invalidates_old_token(
         headers=auth_headers,
     )
     assert changed.status_code == 200
-    new_headers = {"Authorization": f"Bearer {changed.json()['access_token']}"}
+    new_headers = auth_header(changed, token_version=1)
 
     assert (await client.get("/api/v1/auth/me", headers=auth_headers)).status_code == 401
     assert (await client.get("/api/v1/auth/me", headers=new_headers)).status_code == 200
@@ -182,7 +279,7 @@ async def test_single_admin_requires_password_change(client: AsyncClient, sessio
         json={"email": "administrator@pan.internal", "password": "123456"},
     )
     assert regular_login_rejects_admin.status_code == 401
-    old_headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+    old_headers = auth_header(login)
 
     blocked = await client.get("/api/v1/admin/overview", headers=old_headers)
     assert blocked.status_code == 403
@@ -195,7 +292,7 @@ async def test_single_admin_requires_password_change(client: AsyncClient, sessio
     )
     assert changed.status_code == 200
     assert changed.json()["user"]["must_change_password"] is False
-    new_headers = {"Authorization": f"Bearer {changed.json()['access_token']}"}
+    new_headers = auth_header(changed, token_version=1)
     overview = await client.get("/api/v1/admin/overview", headers=new_headers)
     assert overview.status_code == 200
     assert overview.json()["disk_total_bytes"] > 0
@@ -205,7 +302,7 @@ async def test_single_admin_requires_password_change(client: AsyncClient, sessio
         "/api/v1/auth/register",
         json={"email": "regular@example.com", "name": "Regular", "password": "password123"},
     )
-    regular_headers = {"Authorization": f"Bearer {regular.json()['access_token']}"}
+    regular_headers = auth_header(regular)
     denied = await client.get("/api/v1/admin/overview", headers=regular_headers)
     assert denied.status_code == 403
     assert denied.json()["code"] == "ADMIN_REQUIRED"
@@ -247,9 +344,7 @@ async def test_single_admin_requires_password_change(client: AsyncClient, sessio
     )
     assert assigned_login.status_code == 200
     assert assigned_login.json()["user"]["must_change_password"] is True
-    temporary_headers = {
-        "Authorization": f"Bearer {assigned_login.json()['access_token']}"
-    }
+    temporary_headers = auth_header(assigned_login)
     password_required = await client.get("/api/v1/nodes", headers=temporary_headers)
     assert password_required.status_code == 403
     assert password_required.json()["code"] == "PASSWORD_CHANGE_REQUIRED"
@@ -263,9 +358,7 @@ async def test_single_admin_requires_password_change(client: AsyncClient, sessio
         headers=temporary_headers,
     )
     assert assigned_changed.status_code == 200
-    assigned_headers = {
-        "Authorization": f"Bearer {assigned_changed.json()['access_token']}"
-    }
+    assigned_headers = auth_header(assigned_changed, token_version=1)
     assert (await client.get("/api/v1/nodes", headers=assigned_headers)).status_code == 200
 
     reset = await client.post(
@@ -313,7 +406,7 @@ async def test_external_api_application_account_scope_findlist_and_usage(
         "/api/v1/admin/login",
         json={"username": "administrator", "password": "admin-password"},
     )
-    admin_headers = {"Authorization": f"Bearer {admin_login.json()['access_token']}"}
+    admin_headers = auth_header(admin_login)
     me = await client.get("/api/v1/auth/me", headers=auth_headers)
     owner_id = me.json()["id"]
 
@@ -334,7 +427,7 @@ async def test_external_api_application_account_scope_findlist_and_usage(
         "/api/v1/auth/register",
         json={"email": "separate@example.com", "name": "Separate", "password": "password123"},
     )
-    other_headers = {"Authorization": f"Bearer {other.json()['access_token']}"}
+    other_headers = auth_header(other)
     other_root = (await client.get("/api/v1/nodes", headers=other_headers)).json()[
         "current_folder"
     ]

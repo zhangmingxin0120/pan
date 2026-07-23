@@ -2,7 +2,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from fastapi.responses import FileResponse
-from sqlalchemy import asc, case, desc, func, select
+from sqlalchemy import asc, case, desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
@@ -29,6 +29,10 @@ router = APIRouter(prefix="/nodes", tags=["文件"])
 async def list_nodes(
     parent_id: uuid.UUID | None = None,
     search: str | None = Query(default=None, max_length=100),
+    file_type: str = Query(
+        default="all",
+        pattern="^(all|folder|image|audio|video|pdf|document|spreadsheet|presentation|archive|executable|code)$",
+    ),
     sort_by: str = Query(default="updated_at", pattern="^(name|size|updated_at)$"),
     sort_order: str = Query(default="desc", pattern="^(asc|desc)$"),
     page: int = Query(default=1, ge=1),
@@ -40,6 +44,26 @@ async def list_nodes(
     filters = [Node.owner_id == user.id, Node.parent_id == folder.id, Node.trashed_at.is_(None)]
     if search:
         filters.append(Node.name.ilike(f"%{search.strip()}%"))
+    if file_type != "all":
+        lower_name = func.lower(Node.name)
+
+        def extensions(*values: str):
+            return or_(*(lower_name.like(f"%.{value}") for value in values))
+
+        type_filters = {
+            "folder": Node.kind == NodeKind.FOLDER,
+            "image": or_(Node.content_type.ilike("image/%"), extensions("jpg", "jpeg", "png", "gif", "webp", "svg", "bmp", "heic")),
+            "audio": or_(Node.content_type.ilike("audio/%"), extensions("mp3", "wav", "flac", "aac", "ogg", "m4a")),
+            "video": or_(Node.content_type.ilike("video/%"), extensions("mp4", "mov", "mkv", "avi", "webm", "flv")),
+            "pdf": or_(Node.content_type == "application/pdf", extensions("pdf")),
+            "document": or_(Node.content_type.ilike("%word%"), extensions("txt", "md", "doc", "docx", "odt", "rtf")),
+            "spreadsheet": or_(Node.content_type.ilike("%spreadsheet%"), Node.content_type.ilike("%excel%"), extensions("xls", "xlsx", "csv", "ods")),
+            "presentation": or_(Node.content_type.ilike("%presentation%"), Node.content_type.ilike("%powerpoint%"), extensions("ppt", "pptx", "odp")),
+            "archive": or_(Node.content_type.ilike("%zip%"), Node.content_type.ilike("%compressed%"), extensions("zip", "rar", "7z", "tar", "gz", "bz2", "xz")),
+            "executable": extensions("exe", "msi", "apk", "dmg", "appimage", "deb", "rpm"),
+            "code": extensions("js", "jsx", "ts", "tsx", "vue", "html", "css", "scss", "less", "py", "java", "go", "rs", "php", "sql", "sh", "json", "yaml", "yml", "xml"),
+        }
+        filters.append(type_filters[file_type])
     sort_columns = {"name": func.lower(Node.name), "size": Node.size_bytes, "updated_at": Node.updated_at}
     order = asc(sort_columns[sort_by]) if sort_order == "asc" else desc(sort_columns[sort_by])
     order_by = [case((Node.kind == NodeKind.FOLDER, 0), else_=1), order]
